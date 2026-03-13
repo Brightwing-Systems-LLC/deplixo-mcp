@@ -11,19 +11,37 @@ dev-http:
 # Production Commands
 # =============================================================================
 
-# Deploy updates
-prod-deploy:
+PROD_COMPOSE := "-f docker-compose.bws.yml"
+
+# Pull latest code
+prod-pull:
     git pull origin main
-    docker compose up -d --build
+
+# Build prod image
+prod-build:
+    docker compose {{PROD_COMPOSE}} build web
+
+# Bring up prod services
+prod-up:
+    docker compose {{PROD_COMPOSE}} down --remove-orphans
+    docker compose {{PROD_COMPOSE}} up -d web
+
+# Deploy updates (pull + build + restart)
+prod-deploy: prod-pull prod-build prod-up prod-cleanup
 
 # View production logs
 prod-logs:
-    docker compose logs -f
+    docker compose {{PROD_COMPOSE}} logs -f
 
 # Restart production services
 prod-restart:
-    docker compose restart
+    docker compose {{PROD_COMPOSE}} restart
 
 # Stop production services
 prod-down:
-    docker compose down
+    docker compose {{PROD_COMPOSE}} down
+
+# Clean up unused Docker resources
+prod-cleanup:
+    docker image prune -af
+    docker builder prune -af
