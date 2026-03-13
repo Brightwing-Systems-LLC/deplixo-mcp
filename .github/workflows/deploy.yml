@@ -34,7 +34,7 @@ jobs:
               -o IdentitiesOnly=yes \
               -o StrictHostKeyChecking=yes \
               "${{ secrets.SSH_USER_BWS_PROD }}@${{ secrets.SSH_HOST_BWS_PROD }}" \
-              "cd /opt/brightwing-app-mcp && just prod-deploy"
+              "cd /root/apps/brightwing-app-mcp && just prod-deploy"
 
       - name: Compose status
         if: always()
