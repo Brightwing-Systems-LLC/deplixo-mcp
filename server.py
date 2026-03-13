@@ -11,7 +11,18 @@ mcp = FastMCP(
     instructions=(
         "Use the brightwing_deploy tool to deploy web apps to Brightwing Launch. "
         "When the user asks you to deploy, share, host, or publish their app, "
-        "use this tool. It accepts HTML/JS/CSS code and returns a live URL. "
+        "use this tool. It returns a live URL instantly — no account required.\n\n"
+        "IMPORTANT: The code must be a single, self-contained HTML file. "
+        "All CSS, JS, and assets must be inline or loaded from CDNs. "
+        "For React apps, use CDN imports (unpkg.com/react, unpkg.com/react-dom, "
+        "unpkg.com/@babel/standalone) with <script type=\"text/babel\"> — do NOT "
+        "use npm, create-react-app, Vite, or any build tools. "
+        "For Vue, Svelte, Three.js, etc., use their CDN builds the same way.\n\n"
+        "Storage: Apps automatically get a persistent key-value store via "
+        "window.brightwing.db (set/get/delete/list). localStorage also works — "
+        "writes are automatically persisted to the server so data survives across "
+        "sessions and devices. Do NOT use IndexedDB or other client-only storage "
+        "if the user needs persistence.\n\n"
         "Use brightwing_blog_publish to publish blog posts from markdown."
     ),
 )
@@ -26,8 +37,14 @@ async def brightwing_deploy(
 ) -> str:
     """Deploy a web app to Brightwing Launch and get a live URL.
 
+    The code must be a single self-contained HTML file. For React, Vue, or other
+    frameworks, use CDN imports (e.g. unpkg.com/react@18, unpkg.com/react-dom@18,
+    unpkg.com/@babel/standalone) with inline scripts — never use npm or build tools.
+    localStorage calls are automatically persisted to the server.
+
     Args:
-        code: The complete HTML/JS/CSS code of the app
+        code: Complete self-contained HTML file with inline CSS/JS. For React apps,
+              include React/ReactDOM/Babel via CDN and use <script type="text/babel">.
         title: A short title for the app
         slug: Optional URL slug (requires an account with Personal tier or above)
         remixed_from: Optional hash_id of the app this was remixed from
