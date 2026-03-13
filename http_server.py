@@ -1,13 +1,9 @@
-"""HTTP transport for the Brightwing MCP server.
-
-FastMCP settings are configured via FASTMCP_ prefixed env vars.
-"""
-import os
-
-os.environ.setdefault("FASTMCP_HOST", "0.0.0.0")
-os.environ.setdefault("FASTMCP_PORT", os.environ.get("PORT", "8000"))
-
+"""HTTP transport for the Brightwing MCP server."""
 from server import mcp
+
+# Override settings directly before running
+mcp.settings.host = "0.0.0.0"
+mcp.settings.port = 8000
 
 if __name__ == "__main__":
     mcp.run(transport="streamable-http")
