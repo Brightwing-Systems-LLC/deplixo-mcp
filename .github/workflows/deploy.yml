@@ -1,0 +1,45 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/main' }}
+
+    steps:
+      - name: Set up SSH
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY_BWS_PROD }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SSH_HOST_BWS_PROD }}" >> ~/.ssh/known_hosts
+
+      - name: Run prod-deploy
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/id_ed25519 \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              "${{ secrets.SSH_USER_BWS_PROD }}@${{ secrets.SSH_HOST_BWS_PROD }}" \
+              "cd /opt/brightwing-app-mcp && just prod-deploy"
+
+      - name: Compose status
+        if: always()
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes \
+              "${{ secrets.SSH_USER_BWS_PROD }}@${{ secrets.SSH_HOST_BWS_PROD }}" \
+              "docker compose -p brightwing-mcp ps"
