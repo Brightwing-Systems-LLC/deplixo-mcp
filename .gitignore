@@ -3,7 +3,7 @@ __pycache__/
 .venv/
 .env
 .env.prod
-uv.lock
+
 *.egg-info/
 dist/
 build/
