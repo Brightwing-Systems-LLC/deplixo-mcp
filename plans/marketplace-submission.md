@@ -66,9 +66,11 @@ Sections present: Information We Collect, How We Use Your Information, Data Shar
 
 ---
 
-## 7. Documentation & Usage Examples (Claude — minimum 3 examples)
+## 7. Documentation & Usage Examples (Claude — minimum 3 examples) ✅
 
 Claude requires "minimum 3 working examples with user prompts." This content goes directly into the **Claude marketplace submission form** and **OpenAI Apps dashboard** — not a file in the repo.
+
+Usage examples drafted in `plans/usage-examples.md` — 4 examples covering single-file, multi-file React, persistent storage, and remix workflows.
 
 - [ ] **Draft submission documentation** with these sections:
   - Server Description
@@ -251,7 +253,7 @@ Both platforms benefit from a polished public presence.
 1. ~~Safety annotations (§1)~~ ✅
 2. ~~Privacy policy (§5)~~ ✅
 3. ~~Support channels (§6)~~ ✅
-4. Documentation with 3+ examples (§7) — draft content for submission forms
+4. ~~Documentation with 3+ examples (§7)~~ ✅ — see `plans/usage-examples.md`
 5. ~~CORS verification/fix (§2)~~ ✅
 6. ~~TLS verification (§4)~~ ✅
 7. Platform testing — Claude.ai, Desktop, Code (§11b)
