@@ -1,15 +1,13 @@
 # Brightwing MCP Server
 
 ## Overview
-MCP server for deploying web apps and publishing blog posts to Brightwing Launch (brightwing.app).
+MCP server for deploying web apps to Brightwing Launch (brightwing.app). No API key required — zero friction.
 
 ## Tools
-- `brightwing_deploy` - Deploy HTML/JS/CSS code and get a live URL
-- `brightwing_blog_publish` - Publish markdown blog posts
+- `brightwing_deploy` - Deploy HTML/JS/CSS code and get a live URL instantly
 
 ## Configuration
-Requires two environment variables:
-- `BRIGHTWING_API_KEY` - Your API key from https://brightwing.app/dashboard/api-key/
+Optional environment variable:
 - `BRIGHTWING_API_URL` - API URL (default: https://brightwing.app)
 
 ## Development

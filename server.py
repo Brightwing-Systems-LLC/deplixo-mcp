@@ -1,10 +1,9 @@
-"""Brightwing Launch MCP Server - Deploy AI apps and publish blog posts."""
+"""Brightwing Launch MCP Server - Deploy AI apps instantly."""
 import os
 import httpx
 from mcp.server.fastmcp import FastMCP
 
 BRIGHTWING_API_URL = os.environ.get("BRIGHTWING_API_URL", "https://brightwing.app")
-BRIGHTWING_API_KEY = os.environ.get("BRIGHTWING_API_KEY", "")
 
 mcp = FastMCP(
     "Brightwing Launch",
@@ -23,8 +22,7 @@ mcp = FastMCP(
         "window.brightwing.db (set/get/delete/list). localStorage also works — "
         "writes are automatically persisted to the server so data survives across "
         "sessions and devices. Do NOT use IndexedDB or other client-only storage "
-        "if the user needs persistence.\n\n"
-        "Use brightwing_blog_publish to publish blog posts from markdown."
+        "if the user needs persistence."
     ),
 )
 
@@ -72,15 +70,10 @@ async def brightwing_deploy(
     if remixed_from:
         payload["remixed_from"] = remixed_from
 
-    headers = {}
-    if BRIGHTWING_API_KEY:
-        headers["Authorization"] = f"Bearer {BRIGHTWING_API_KEY}"
-
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{BRIGHTWING_API_URL}/api/v1/deploy",
             json=payload,
-            headers=headers,
         )
 
     if response.status_code == 200:
@@ -92,57 +85,15 @@ async def brightwing_deploy(
             f"Hash ID: {hash_id}",
             f"Source: {url.rstrip('/')}/source",
         ]
-        # If no API key was used, the app is unclaimed — show claim info
         claim_url = data.get("claim_url")
         if claim_url:
             parts.append(
                 f"\nTo manage this app later, save this claim link: {claim_url}\n"
                 f"(Visit the link and enter your email to attach the app to your account.)"
             )
-        else:
-            parts.append(f"Dashboard: https://brightwing.app/dashboard/apps/{hash_id}/")
         return "\n".join(parts)
     else:
         return f"Deployment failed (HTTP {response.status_code}): {response.text}"
-
-
-@mcp.tool()
-async def brightwing_blog_publish(
-    title: str,
-    markdown: str,
-    slug: str = "",
-    excerpt: str = "",
-) -> str:
-    """Publish a blog post to Brightwing Launch.
-
-    Args:
-        title: The blog post title
-        markdown: The blog post content in markdown format
-        slug: Optional URL slug. Auto-generated from title if omitted.
-        excerpt: Optional short excerpt for the blog index and SEO.
-    """
-    if not BRIGHTWING_API_KEY:
-        return "Error: BRIGHTWING_API_KEY environment variable not set. Get your API key at https://brightwing.app/dashboard/api-key/"
-
-    payload = {"title": title, "markdown": markdown}
-    if slug:
-        payload["slug"] = slug
-    if excerpt:
-        payload["excerpt"] = excerpt
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            f"{BRIGHTWING_API_URL}/api/v1/blog",
-            json=payload,
-            headers={"Authorization": f"Bearer {BRIGHTWING_API_KEY}"},
-        )
-
-    if response.status_code == 200:
-        data = response.json()
-        url = data.get("url", "")
-        return f"Blog post published: {url}\n\nTitle: {data.get('title', '')}"
-    else:
-        return f"Publishing failed (HTTP {response.status_code}): {response.text}"
 
 
 def main():

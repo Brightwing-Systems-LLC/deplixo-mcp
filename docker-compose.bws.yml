@@ -11,8 +11,6 @@ services:
       FASTMCP_HOST: "0.0.0.0"
       FASTMCP_PORT: "8000"
       BRIGHTWING_API_URL: "https://brightwing.app"
-    env_file:
-      - .env.prod
     networks:
       - bws_network
     restart: unless-stopped
