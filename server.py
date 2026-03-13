@@ -50,10 +50,10 @@ async def brightwing_deploy(
         files: Dict of {path: content} for multi-file apps. Must include
                "index.html". Example: {"index.html": "...", "style.css": "...",
                "app.js": "..."}. Files are served at their paths relative to
-               the app URL (e.g. brightwing.app/abc123/style.css).
+               the app URL (e.g. brightwing.app/abcd-efgh/style.css).
         title: A short title for the app
         slug: Optional URL slug (requires an account with Personal tier or above)
-        remixed_from: Optional hash_id of the app this was remixed from
+        remixed_from: Optional app ID of the app this was remixed from (e.g. abcd-efgh)
     """
     if not code and not files:
         return "Error: Either 'code' or 'files' must be provided."
