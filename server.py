@@ -12,8 +12,9 @@ mcp = FastMCP(
         "Use the brightwing_deploy tool to deploy web apps to Brightwing Launch. "
         "When the user asks you to deploy, share, host, or publish their app, "
         "use this tool. It returns a live URL instantly — no account required.\n\n"
-        "IMPORTANT: The code must be a single, self-contained HTML file. "
-        "All CSS, JS, and assets must be inline or loaded from CDNs. "
+        "IMPORTANT: Apps can be single-file (pass `code`) or multi-file (pass "
+        "`files` dict with paths like index.html, style.css, app.js). "
+        "Multi-file apps have each file served at its path under the app URL. "
         "For React apps, use CDN imports (unpkg.com/react, unpkg.com/react-dom, "
         "unpkg.com/@babel/standalone) with <script type=\"text/babel\"> — do NOT "
         "use npm, create-react-app, Vite, or any build tools. "
@@ -30,26 +31,42 @@ mcp = FastMCP(
 
 @mcp.tool()
 async def brightwing_deploy(
-    code: str,
+    code: str = "",
+    files: dict[str, str] | None = None,
     title: str = "",
     slug: str = "",
     remixed_from: str = "",
 ) -> str:
     """Deploy a web app to Brightwing Launch and get a live URL.
 
-    The code must be a single self-contained HTML file. For React, Vue, or other
-    frameworks, use CDN imports (e.g. unpkg.com/react@18, unpkg.com/react-dom@18,
-    unpkg.com/@babel/standalone) with inline scripts — never use npm or build tools.
-    localStorage calls are automatically persisted to the server.
+    Apps can be single-file or multi-file. For single-file apps, pass the HTML
+    as `code`. For multi-file apps (separate CSS, JS, assets), pass a `files`
+    dict mapping file paths to content — must include "index.html".
+
+    For React, Vue, or other frameworks: use CDN imports (e.g. unpkg.com/react@18,
+    unpkg.com/react-dom@18, unpkg.com/@babel/standalone) — do NOT use npm or
+    build tools. localStorage calls are automatically persisted to the server.
 
     Args:
-        code: Complete self-contained HTML file with inline CSS/JS. For React apps,
-              include React/ReactDOM/Babel via CDN and use <script type="text/babel">.
+        code: HTML code for single-file apps. Mutually exclusive with `files`.
+        files: Dict of {path: content} for multi-file apps. Must include
+               "index.html". Example: {"index.html": "...", "style.css": "...",
+               "app.js": "..."}. Files are served at their paths relative to
+               the app URL (e.g. brightwing.app/abc123/style.css).
         title: A short title for the app
         slug: Optional URL slug (requires an account with Personal tier or above)
         remixed_from: Optional hash_id of the app this was remixed from
     """
-    payload = {"code": code, "title": title}
+    if not code and not files:
+        return "Error: Either 'code' or 'files' must be provided."
+    if files and "index.html" not in files:
+        return "Error: 'files' must include 'index.html'."
+
+    payload: dict = {"title": title}
+    if files:
+        payload["files"] = files
+    else:
+        payload["code"] = code
     if slug:
         payload["slug"] = slug
     if remixed_from:
