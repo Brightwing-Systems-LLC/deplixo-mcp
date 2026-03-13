@@ -29,35 +29,45 @@ async def brightwing_deploy(
     Args:
         code: The complete HTML/JS/CSS code of the app
         title: A short title for the app
-        slug: Optional URL slug (requires Personal tier or above)
+        slug: Optional URL slug (requires an account with Personal tier or above)
         remixed_from: Optional hash_id of the app this was remixed from
     """
-    if not BRIGHTWING_API_KEY:
-        return "Error: BRIGHTWING_API_KEY environment variable not set. Get your API key at https://brightwing.app/dashboard/api-key/"
-
     payload = {"code": code, "title": title}
     if slug:
         payload["slug"] = slug
     if remixed_from:
         payload["remixed_from"] = remixed_from
 
+    headers = {}
+    if BRIGHTWING_API_KEY:
+        headers["Authorization"] = f"Bearer {BRIGHTWING_API_KEY}"
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{BRIGHTWING_API_URL}/api/v1/deploy",
             json=payload,
-            headers={"Authorization": f"Bearer {BRIGHTWING_API_KEY}"},
+            headers=headers,
         )
 
     if response.status_code == 200:
         data = response.json()
         url = data.get("url", "")
         hash_id = data.get("hash_id", "")
-        return (
-            f"Your app is live at: {url}\n\n"
-            f"Hash ID: {hash_id}\n"
-            f"Source: {url.rstrip('/')}source\n"
-            f"Dashboard: https://brightwing.app/dashboard/apps/{hash_id}/"
-        )
+        parts = [
+            f"Your app is live at: {url}",
+            f"Hash ID: {hash_id}",
+            f"Source: {url.rstrip('/')}/source",
+        ]
+        # If no API key was used, the app is unclaimed — show claim info
+        claim_url = data.get("claim_url")
+        if claim_url:
+            parts.append(
+                f"\nTo manage this app later, save this claim link: {claim_url}\n"
+                f"(Visit the link and enter your email to attach the app to your account.)"
+            )
+        else:
+            parts.append(f"Dashboard: https://brightwing.app/dashboard/apps/{hash_id}/")
+        return "\n".join(parts)
     else:
         return f"Deployment failed (HTTP {response.status_code}): {response.text}"
 
