@@ -1,0 +1,20 @@
+[project]
+name = "brightwing-app-mcp"
+version = "1.0.0"
+description = "MCP server for deploying apps to Brightwing Launch"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0.0",
+    "httpx>=0.27.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+brightwing-mcp = "server:main"
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py"]

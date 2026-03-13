@@ -1,0 +1,21 @@
+name: brightwing-mcp
+
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    container_name: brightwingmcp_web
+    command: ["python", "http_server.py"]
+    environment:
+      PORT: "8000"
+      BRIGHTWING_API_URL: "https://brightwing.app"
+    env_file:
+      - .env.prod
+    networks:
+      - bws_network
+    restart: unless-stopped
+
+networks:
+  bws_network:
+    external: true
