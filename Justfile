@@ -1,4 +1,4 @@
-# Brightwing MCP Server recipes
+# Deplixo MCP Server recipes
 
 # Development
 dev:
@@ -15,6 +15,7 @@ PROD_COMPOSE := "-f docker-compose.bws.yml"
 
 # Pull latest code (reset to match remote — prod should never have local changes)
 prod-pull:
+    git remote prune origin
     git fetch origin main
     git reset --hard origin/main
 
