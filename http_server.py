@@ -1,4 +1,4 @@
-"""HTTP transport for the Brightwing MCP server."""
+"""HTTP transport for the Deplixo MCP server."""
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 from mcp.server.transport_security import TransportSecuritySettings
@@ -11,9 +11,9 @@ mcp.settings.port = 8000
 mcp.settings.streamable_http_path = "/"
 mcp.settings.transport_security = TransportSecuritySettings(
     enable_dns_rebinding_protection=True,
-    allowed_hosts=["mcp.brightwing.app"],
+    allowed_hosts=["mcp.deplixo.com"],
     allowed_origins=[
-        "https://mcp.brightwing.app",
+        "https://mcp.deplixo.com",
         "https://claude.ai",
         "https://*.claude.ai",
     ],
@@ -28,7 +28,7 @@ def create_app():
         allow_origins=[
             "https://claude.ai",
             "https://*.claude.ai",
-            "https://mcp.brightwing.app",
+            "https://mcp.deplixo.com",
         ],
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["*"],

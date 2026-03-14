@@ -1,7 +1,7 @@
 [project]
-name = "brightwing-app-mcp"
+name = "deplixo-mcp"
 version = "1.0.0"
-description = "MCP server for deploying apps to Brightwing Launch"
+description = "MCP server for deploying apps to Deplixo"
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=1.0.0",
@@ -15,7 +15,7 @@ dev = [
 ]
 
 [project.scripts]
-brightwing-mcp = "server:main"
+deplixo-mcp = "server:main"
 
 [tool.pytest.ini_options]
 python_files = ["test_*.py"]

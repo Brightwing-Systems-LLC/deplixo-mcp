@@ -1,16 +1,16 @@
-name: brightwing-mcp
+name: deplixo-mcp
 
 services:
   web:
     build:
       context: .
       target: runtime
-    container_name: brightwingmcp_web
+    container_name: deplixomcp_web
     command: ["python", "http_server.py"]
     environment:
       FASTMCP_HOST: "0.0.0.0"
       FASTMCP_PORT: "8000"
-      BRIGHTWING_API_URL: "https://brightwing.app"
+      DEPLIXO_API_URL: "https://deplixo.com"
     networks:
       - bws_network
     restart: unless-stopped
