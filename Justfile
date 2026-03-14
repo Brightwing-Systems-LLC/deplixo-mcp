@@ -13,9 +13,10 @@ dev-http:
 
 PROD_COMPOSE := "-f docker-compose.bws.yml"
 
-# Pull latest code
+# Pull latest code (reset to match remote — prod should never have local changes)
 prod-pull:
-    git pull origin main
+    git fetch origin main
+    git reset --hard origin/main
 
 # Build prod image
 prod-build:
