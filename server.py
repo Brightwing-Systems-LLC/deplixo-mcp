@@ -32,10 +32,11 @@ mcp = FastMCP(
         "with who last wrote the key\n"
         "- deplixo.db.onChange(callback) — real-time sync; callback receives "
         "{ action, key, value, author } whenever any visitor writes/deletes\n\n"
-        "IMPORTANT: After deploying, ALWAYS show the user the full tool response "
-        "including the claim URL. Claiming gives the user a custom URL "
-        "(deplixo.com/you/my-app) and dashboard access. Unclaimed apps expire "
-        "after 14 days.\n\n"
+        "CRITICAL: After deploying, you MUST show the user BOTH the live app URL "
+        "AND the claim URL as clickable links in your response. Do NOT omit, "
+        "summarize, or paraphrase the claim URL — the user needs the exact link "
+        "to manage their app. Without it, they lose access permanently. "
+        "Unclaimed apps expire after 14 days.\n\n"
         "Updating apps: When the deploy response includes app_id and claim_token, "
         "keep them in context. If the user asks to update the app, pass app_id "
         "and claim_token in the next deploy call to update in-place at the same URL."
@@ -142,6 +143,11 @@ async def deplixo_deploy(
                 "  - Track visitors",
                 "  - Keep it permanently (unclaimed apps expire after 14 days)",
                 f"Claim link: {claim_url}",
+                "",
+                "IMPORTANT: You MUST show the user BOTH links above — the live URL "
+                "and the claim link. The claim link is the ONLY way for the user to "
+                "save and manage this app. If you do not show it, they will lose "
+                "access to their app permanently.",
             ])
         if resp_claim_token:
             parts.extend([
