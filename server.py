@@ -84,6 +84,21 @@ async def deplixo_deploy(
     To update an existing app, pass the app_id and claim_token from a previous
     deploy response. This updates the app in-place at the same URL.
 
+    IMPORTANT — File uploads: If the app involves images, photos, or file uploads,
+    use the Deplixo upload API instead of base64/data URLs/localStorage. The app's
+    injected SDK provides:
+      window.deplixo.upload(file) — upload a File object, returns Promise<{ url, filename, size }>
+      window.deplixo.uploads.list() — list uploaded files
+      window.deplixo.uploads.delete(filename) — delete a file
+    Example usage in app code:
+      const input = document.querySelector('input[type="file"]');
+      input.addEventListener('change', async (e) => {
+        const result = await deplixo.upload(e.target.files[0]);
+        img.src = result.url; // permanent hosted URL
+      });
+    Max 5MB per file. Do NOT use base64, data URLs, or FileReader.readAsDataURL()
+    for storing images — always use deplixo.upload() instead.
+
     Args:
         code: HTML code for single-file apps. Mutually exclusive with `files`.
         files: Dict of {path: content} for multi-file apps. Must include
