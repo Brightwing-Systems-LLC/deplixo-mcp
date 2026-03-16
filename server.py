@@ -115,13 +115,26 @@ async def deplixo_deploy(
       loadRecipes();
 
     ### Example: Single-user progress tracker (still use collections!)
-      const progress = deplixo.db.collection("progress");
-      // On init: load saved state
-      const items = await progress.list();
-      // On change: save to collection instead of localStorage
-      await progress.add({ day: 5, completed: true });
-      // Real-time sync across user's devices
-      progress.onChange(() => reloadAndRender());
+      const store = deplixo.db.collection("state");
+      let appState = {};
+
+      async function loadState() {
+        const items = await store.list();
+        if (items.length > 0) appState = items[0].value;
+        render(appState);
+      }
+
+      async function saveState(newState) {
+        appState = newState;
+        const items = await store.list();
+        if (items.length > 0) await store.update(items[0].id, newState);
+        else await store.add(newState);
+        render(appState);
+      }
+
+      // Real-time: re-render when data changes on another device
+      store.onChange(() => loadState());
+      loadState();
 
     Args:
         code: HTML code for single-file apps. Mutually exclusive with `files`.
