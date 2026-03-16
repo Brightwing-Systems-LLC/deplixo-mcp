@@ -101,11 +101,60 @@ async def deplixo_deploy(
     - If the user's existing code uses localStorage, REWRITE it to use
       deplixo.db.collection() before deploying. Do not deploy localStorage code.
 
-    ### Example: Shared Recipe Box with Photo Uploads
+    ### Two patterns: Personal Apps vs Multi-User Apps
+
+    CRITICAL: Choose the right pattern based on how many people use the app.
+
+    **Personal app** (one person, multiple devices — tracker, journal, todo):
+    - Use ONE shared record. All devices read and write the SAME record.
+    - Do NOT filter by deplixo.user.id or author — visitor IDs are per-browser,
+      so phone and desktop have DIFFERENT IDs even for the same person.
+    - Do NOT use ensureIdentity or require a display name.
+    - onChange fires on ALL devices, all re-render the same data.
+
+    **Multi-user app** (multiple people — chat, shared list, scoreboard):
+    - Each person adds their own entries via .add() — author is tracked.
+    - Use deplixo.user and author info to show who contributed what.
+    - Identity modal will prompt for a display name on first write.
+    - onChange fires for everyone, all re-render the full shared list.
+
+    ### Example: Personal App — Progress Tracker
+    One person across phone, tablet, desktop. All devices stay in sync.
+
+      const store = deplixo.db.collection("state");
+      let appState = {};
+      let recordId = null;
+
+      async function loadState() {
+        const items = await store.list();
+        if (items.length > 0) {
+          recordId = items[0].id;
+          appState = items[0].value;
+        }
+        render(appState);
+      }
+
+      async function saveState(newState) {
+        appState = newState;
+        if (recordId) await store.update(recordId, newState);
+        else {
+          const result = await store.add(newState);
+          recordId = result.id;
+        }
+        render(appState);
+      }
+
+      // Any device saves → all other devices re-render automatically
+      store.onChange(() => loadState());
+      loadState();
+
+    ### Example: Multi-User App — Shared Recipe Box
+    Multiple people contribute and see each other's entries.
+
       const recipes = deplixo.db.collection("recipes");
       async function loadRecipes() {
         const all = await recipes.list();
-        renderRecipes(all);  // each item: { id, value: { title, photo, ... }, author }
+        renderRecipes(all);  // each item: { id, value, author: { id, name } }
       }
       async function addRecipe(title, ingredients, photoFile) {
         const photo = await deplixo.upload(photoFile);
@@ -113,28 +162,6 @@ async def deplixo_deploy(
       }
       recipes.onChange(() => loadRecipes());
       loadRecipes();
-
-    ### Example: Single-user progress tracker (still use collections!)
-      const store = deplixo.db.collection("state");
-      let appState = {};
-
-      async function loadState() {
-        const items = await store.list();
-        if (items.length > 0) appState = items[0].value;
-        render(appState);
-      }
-
-      async function saveState(newState) {
-        appState = newState;
-        const items = await store.list();
-        if (items.length > 0) await store.update(items[0].id, newState);
-        else await store.add(newState);
-        render(appState);
-      }
-
-      // Real-time: re-render when data changes on another device
-      store.onChange(() => loadState());
-      loadState();
 
     Args:
         code: HTML code for single-file apps. Mutually exclusive with `files`.
