@@ -94,6 +94,39 @@ async def deplixo_deploy(
       - Personal apps: `deplixo.db.collection("state", { personal: true })`
       - Multi-user apps: `deplixo.db.collection("recipes", { personal: false })`
 
+    ### Proxy (call external APIs with server-side secrets)
+      const data = await deplixo.proxy(url, { method, headers, body })
+      → { status: 200, body: { ... } }
+    Secrets are resolved server-side: use ${SECRET_NAME} in headers or body.
+    The app owner must configure secrets and allowed domains in the dashboard.
+    Example:
+      const weather = await deplixo.proxy(
+        "https://api.weather.gov/gridpoints/OKX/33,37/forecast",
+        { headers: { "Authorization": "Bearer ${WEATHER_KEY}" } }
+      );
+    NEVER embed API keys in HTML/JS source. Use deplixo.proxy() with secrets.
+
+    ### AI (platform-managed LLM access)
+      const answer = await deplixo.ai.prompt("Generate 5 quiz questions")
+      → "1. What is..."
+
+      const result = await deplixo.ai.prompt({
+        system: "You are a quiz master. Return JSON.",
+        user: "Generate 5 questions about space",
+        json: true
+      })
+      → { questions: [...] }
+
+      // Streaming
+      const stream = deplixo.ai.stream("Write a story about a robot");
+      for await (const chunk of stream) {
+        outputEl.textContent += chunk;
+      }
+    AI uses the app owner's credits (included with their tier). No API key
+    needed — it just works. The app owner can configure the model tier (low,
+    medium, high) and preferred provider in the dashboard.
+    NEVER embed LLM API keys in source code. Use deplixo.ai.prompt() instead.
+
     ### IMPORTANT RULES
     - ALWAYS use deplixo.db.collection() for ANY persistent data — even for
       single-user apps. Users expect their data on all their devices (phone,
@@ -101,6 +134,8 @@ async def deplixo_deploy(
     - NEVER use localStorage. Always use deplixo.db.collection() instead.
       Collections sync across all devices and browsers in real-time via SSE.
     - NEVER use base64/data URLs for images — use deplixo.upload()
+    - NEVER embed API keys in HTML/JS — use deplixo.proxy() with ${SECRET_NAME}
+    - NEVER embed LLM API keys — use deplixo.ai.prompt() (uses platform credits)
     - Collections are shared across ALL visitors automatically
     - Real-time updates work via .onChange() — ALWAYS use it to re-render on changes
     - If the user's existing code uses localStorage, REWRITE it to use
