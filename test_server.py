@@ -45,7 +45,7 @@ async def test_deploy_single_file_success():
     assert "claim" in result.lower()
     assert "tok_secret123" in result
     assert "app_id=" in result
-    assert "MUST show the user BOTH links" in result
+    assert "MUST tell the user how long their app will last" in result
 
 
 @pytest.mark.asyncio

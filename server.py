@@ -91,6 +91,10 @@ mcp = FastMCP(
         "- Should results be saved, shared, or exported?\n"
         "Getting clarity upfront produces much better apps than guessing.\n\n"
 
+        "ALWAYS include a `description` when deploying — a 1-2 sentence summary "
+        "of what the app does. This powers social preview cards when the URL is "
+        "shared on Twitter, Slack, iMessage, etc. Without it, shared links look bare.\n\n"
+
         "CRITICAL: After deploying, you MUST show the user BOTH the live app URL "
         "AND the claim URL as clickable links in your response. Do NOT omit, "
         "summarize, or paraphrase the claim URL — the user needs the exact link "
@@ -120,6 +124,7 @@ async def deplixo_deploy(
     code: str = "",
     files: dict[str, str] | None = None,
     title: str = "",
+    description: str = "",
     slug: str = "",
     remixed_from: str = "",
     app_id: str = "",
@@ -343,6 +348,9 @@ async def deplixo_deploy(
                "app.js": "..."}. Files are served at their paths relative to
                the app URL (e.g. deplixo.com/abcd-efgh/style.css).
         title: A short title for the app
+        description: A 1-2 sentence description of what the app does. Used for
+                     social preview cards (OG tags) when the URL is shared on
+                     Twitter, Slack, iMessage, etc. Always include this.
         slug: Optional URL slug for a named app URL (requires an account)
         remixed_from: Optional app ID of the app this was remixed from (e.g. abcd-efgh)
         app_id: Hash ID from a previous deploy to update an existing app
@@ -354,7 +362,7 @@ async def deplixo_deploy(
     if files and "index.html" not in files:
         return "Error: 'files' must include 'index.html'."
 
-    payload: dict = {"title": title}
+    payload: dict = {"title": title, "description": description}
     if files:
         payload["files"] = files
     else:
