@@ -6,6 +6,55 @@ from mcp.types import ToolAnnotations
 
 DEPLIXO_API_URL = os.environ.get("DEPLIXO_API_URL", "https://deplixo.com")
 
+
+def _format_suggestions(suggestions: dict) -> list[str]:
+    """Format code analysis suggestions into human-readable text lines."""
+    lines = ["", "⚠ This app has issues that need fixing:"]
+
+    if suggestions.get("intent"):
+        lines.extend(["", f'Intent: "{suggestions["intent"]}"'])
+
+    # Regex-detected stubs
+    if suggestions.get("stubs"):
+        lines.append("")
+        lines.append("Stub patterns detected:")
+        for stub in suggestions["stubs"]:
+            lines.append(f"  - {stub['message']}")
+
+    # Missing primitives (regex)
+    if suggestions.get("missing_primitives"):
+        lines.append("")
+        lines.append("Missing Deplixo primitives:")
+        for mp in suggestions["missing_primitives"]:
+            lines.append(f"  - {mp['message']}")
+            if mp.get("fix"):
+                lines.append(f"    Fix: {mp['fix']}")
+
+    # LLM-detected functional gaps
+    if suggestions.get("functional_gaps"):
+        lines.append("")
+        lines.append("Functional gaps:")
+        for gap in suggestions["functional_gaps"]:
+            lines.append(f"  - {gap.get('feature', 'Unknown feature')}: "
+                         f"{gap.get('current_state', '')}")
+            if gap.get("fix_code"):
+                lines.append(f"    Fix with {gap.get('primitive', 'Deplixo SDK')}:")
+                for code_line in gap["fix_code"].strip().split("\n"):
+                    lines.append(f"      {code_line}")
+
+    # Missed opportunities (informational, non-blocking)
+    if suggestions.get("missed_opportunities"):
+        lines.append("")
+        lines.append("Suggestions (not blocking, but would improve the app):")
+        for opp in suggestions["missed_opportunities"]:
+            lines.append(f"  - {opp}")
+
+    lines.extend([
+        "",
+        "Please fix these issues and redeploy. The user expects a working app.",
+    ])
+    return lines
+
 mcp = FastMCP(
     "Deplixo",
     instructions=(
@@ -242,7 +291,7 @@ async def deplixo_deploy(
     if claim_token:
         payload["claim_token"] = claim_token
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             f"{DEPLIXO_API_URL}/api/v1/deploy",
             json=payload,
@@ -255,6 +304,8 @@ async def deplixo_deploy(
         updated = data.get("updated", False)
         resp_claim_token = data.get("claim_token", "")
         claim_url = data.get("claim_url")
+
+        suggestions = data.get("suggestions")
 
         if updated:
             parts = [
@@ -279,6 +330,8 @@ async def deplixo_deploy(
             else:
                 update_line += "."
             parts.append(update_line)
+            if suggestions:
+                parts.extend(_format_suggestions(suggestions))
             return "\n".join(parts)
 
         # New deploy
@@ -308,6 +361,8 @@ async def deplixo_deploy(
                 f'To update this app in the current conversation, pass app_id="{hash_id}" '
                 f'and claim_token="{resp_claim_token}".',
             ])
+        if suggestions:
+            parts.extend(_format_suggestions(suggestions))
         return "\n".join(parts)
     else:
         error_text = response.text[:5000] if len(response.text) > 5000 else response.text
