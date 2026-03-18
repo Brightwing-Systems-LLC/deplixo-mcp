@@ -259,31 +259,48 @@ async def deplixo_deploy(
         if updated:
             parts = [
                 f"App updated! Live at: {url}",
-                "",
-                f'To update again, pass app_id="{hash_id}"',
             ]
+            if claim_url:
+                parts.extend([
+                    "",
+                    "APP DURATION: This app is still UNCLAIMED and will expire "
+                    "in 24 hours. Claiming is free and extends it to 7 days. "
+                    "Paid plans (Personal/Pro) keep apps permanently.",
+                    f"Claim link: {claim_url}",
+                    "",
+                    "IMPORTANT: You MUST tell the user how long their app will "
+                    "last and show them BOTH the live URL and the claim link. "
+                    "Without the claim link, they will lose access permanently.",
+                ])
+            parts.append("")
+            update_line = f'To update again, pass app_id="{hash_id}"'
             if resp_claim_token:
-                parts[-1] += f' and claim_token="{resp_claim_token}".'
+                update_line += f' and claim_token="{resp_claim_token}".'
             else:
-                parts[-1] += "."
+                update_line += "."
+            parts.append(update_line)
             return "\n".join(parts)
 
         # New deploy
-        parts = [f"App deployed! Live at: {url}"]
+        parts = [
+            f"App deployed! Live at: {url}",
+            "",
+            "APP DURATION: This app will expire in 24 hours unless claimed. "
+            "Claiming is free and extends it to 7 days. "
+            "Paid plans (Personal/Pro) keep apps permanently.",
+        ]
         if claim_url:
             parts.extend([
                 "",
-                "Claim this app to:",
-                "  - Name it and get a custom URL (deplixo.com/you/my-app)",
-                "  - Manage it from your dashboard",
-                "  - Track visitors",
-                "  - Keep it longer (unclaimed apps expire in 24 hours! Free accounts get 7 days, paid plans keep apps permanently)",
                 f"Claim link: {claim_url}",
+                "Claiming lets the user name it, get a custom URL "
+                "(deplixo.com/you/my-app), manage it from their dashboard, "
+                "and track visitors.",
                 "",
-                "IMPORTANT: You MUST show the user BOTH links above — the live URL "
-                "and the claim link. The claim link is the ONLY way for the user to "
-                "save and manage this app. If you do not show it, they will lose "
-                "access to their app permanently.",
+                "IMPORTANT: You MUST tell the user how long their app will last "
+                "and show them BOTH the live URL and the claim link. The claim "
+                "link is the ONLY way for the user to save and manage this app. "
+                "If you do not show it, they will lose access permanently.",
             ])
         if resp_claim_token:
             parts.extend([
