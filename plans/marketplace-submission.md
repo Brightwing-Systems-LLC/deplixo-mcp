@@ -85,19 +85,19 @@ Usage examples drafted in `plans/usage-examples.md` — 4 examples covering sing
 
   **Example 1 — Simple HTML app:**
   > User prompt: "Deploy a landing page with a gradient background and centered headline"
-  > → Tool deploys single-file HTML → Returns live URL
+  > → Tool deploys single-file HTML → Returns claim link (1-hour expiry, free to claim)
 
   **Example 2 — Multi-file React app:**
   > User prompt: "Build me a todo app with React and deploy it"
-  > → Tool deploys multi-file app with index.html + app.js + style.css → Returns live URL
+  > → Tool deploys multi-file app with index.html + app.js + style.css → Returns claim link
 
   **Example 3 — App with persistent storage:**
   > User prompt: "Create a notes app that saves data between sessions"
-  > → Tool deploys app using window.deplixo.db for persistence → Returns live URL
+  > → Tool deploys app using window.deplixo.db for persistence → Returns claim link
 
   **Example 4 (bonus) — Remix an existing app:**
   > User prompt: "Take app abc123 and add dark mode"
-  > → Tool deploys remix with remixed_from parameter → Returns new URL
+  > → Tool deploys remix with remixed_from parameter → Returns claim link for new app
 
 ---
 
