@@ -110,12 +110,14 @@ mcp = FastMCP(
         "of what the app does. This powers social preview cards when the URL is "
         "shared on Twitter, Slack, iMessage, etc. Without it, shared links look bare.\n\n"
 
-        "CRITICAL: After deploying, you MUST show the user the claim link as a "
-        "clickable link in your response. Do NOT omit, summarize, or paraphrase "
+        "CRITICAL: After deploying a NEW app, you MUST show the user the claim "
+        "link as a clickable link in your response. Do NOT show the app URL — "
+        "only show the claim link. Do NOT omit, summarize, or paraphrase "
         "the claim URL — the user needs the exact link to save their app. "
         "Without it, they lose access permanently. "
-        "Unclaimed apps expire after 10 minutes. Claiming is free and gives the "
-        "user a permanent URL, share link, and dashboard.\n\n"
+        "Unclaimed apps expire after 1 HOUR then are permanently deleted. "
+        "Claiming is free (no credit card), takes seconds, and gives the user "
+        "a permanent URL, dashboard, and the ability to keep editing.\n\n"
 
         "Updating apps: When the deploy response includes app_id and claim_token, "
         "keep them in context. If the user asks to update the app, pass app_id "
@@ -512,17 +514,20 @@ async def deplixo_deploy(
         suggestions = data.get("suggestions")
 
         if updated:
+            # App was updated in-place (same URL)
             parts = [
-                f"App updated!",
+                f"App updated successfully at: {url}",
             ]
             if claim_url:
+                # Still unclaimed — remind about claiming
                 parts.extend([
                     "",
-                    "This app is still UNCLAIMED and will expire in 10 minutes.",
+                    "REMINDER: This app is still UNCLAIMED and will be permanently "
+                    "deleted in less than 1 hour.",
                     f"Claim link: {claim_url}",
                     "",
-                    "IMPORTANT: You MUST show the claim link to the user. "
-                    "Without it, they will lose access permanently.",
+                    "Show the claim link to the user again so they don't lose "
+                    "their app. Claiming is free — no credit card required.",
                 ])
             parts.append("")
             update_line = f'To update again, pass app_id="{hash_id}"'
@@ -535,33 +540,52 @@ async def deplixo_deploy(
                 parts.extend(_format_suggestions(suggestions))
             return "\n".join(parts)
 
-        # New deploy
-        parts = [
-            "App deployed!",
-        ]
+        # --- First deploy of this app ---
         if claim_url:
-            parts.extend([
+            # New unclaimed app — claim link is the primary output
+            parts = [
+                "App deployed! Here is the claim link:",
                 "",
-                f"Claim link (IMPORTANT — show this to the user): {claim_url}",
+                f"  {claim_url}",
                 "",
-                "The user MUST click this link to claim their app. Claiming is "
-                "free and gives them a permanent URL, a dashboard to manage the "
-                "app, and a share link to send to others. "
-                "Unclaimed apps expire in 10 minutes.",
+                "INSTRUCTIONS FOR YOUR RESPONSE:",
+                "1. Show ONLY the claim link above to the user — do NOT show the "
+                "   app URL. The claim page has a live preview of the app.",
+                "2. Tell the user: \"Click this link to claim your app.\"",
+                "3. Explain: The app will be PERMANENTLY DELETED in 1 hour if "
+                "   not claimed. Claiming is free and takes seconds — no credit "
+                "   card required. They can create a free account or sign in.",
+                "4. Mention: Once claimed, they get a permanent URL, a dashboard, "
+                "   analytics, and they can keep editing the app with you.",
+                "5. Do NOT say \"here is your app URL\" — the claim link IS the "
+                "   link to show. It includes a live preview of the running app.",
                 "",
-                "IMPORTANT: You MUST show the claim link to the user. "
-                "The claim link is the ONLY way for the user to save and manage "
-                "this app. If you do not show it, they will lose access permanently.",
-            ])
-        if resp_claim_token:
-            parts.extend([
-                "",
-                f'To update this app in the current conversation, pass app_id="{hash_id}" '
-                f'and claim_token="{resp_claim_token}".',
-            ])
-        if suggestions:
-            parts.extend(_format_suggestions(suggestions))
-        return "\n".join(parts)
+                "You can keep editing this app in the same conversation. Ask the "
+                "user what they'd like to change.",
+            ]
+            if resp_claim_token:
+                parts.extend([
+                    "",
+                    f'(Internal — to update this app, pass app_id="{hash_id}" '
+                    f'and claim_token="{resp_claim_token}".)',
+                ])
+            if suggestions:
+                parts.extend(_format_suggestions(suggestions))
+            return "\n".join(parts)
+        else:
+            # App was deployed by an authenticated user (already claimed)
+            parts = [
+                f"App deployed at: {url}",
+            ]
+            if resp_claim_token:
+                parts.extend([
+                    "",
+                    f'To update this app, pass app_id="{hash_id}" '
+                    f'and claim_token="{resp_claim_token}".',
+                ])
+            if suggestions:
+                parts.extend(_format_suggestions(suggestions))
+            return "\n".join(parts)
     else:
         error_text = response.text[:5000] if len(response.text) > 5000 else response.text
         return f"Deployment failed (HTTP {response.status_code}): {error_text}"
