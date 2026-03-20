@@ -100,6 +100,7 @@ mcp = FastMCP(
         "- App needs rich text editor -> use deplixo.editor(el) (contentEditable + toolbar)\n"
         "- App needs sharing -> use deplixo.share() (Web Share API + clipboard fallback)\n"
         "- App needs to send emails -> use deplixo.email.send() (Postmark, 2 credits/email)\n"
+        "- App needs external event handling -> use deplixo.webhooks.on(name, handler) for inbound webhooks\n"
         "- App needs access restriction -> pass `access_code` parameter (users must enter code to access the app)\n"
         "- App needs user login/auth -> pass `auth_enabled=True` AND use deplixo.auth.requireLogin() in code\n"
         "- App needs user accounts -> pass `auth_enabled=True` AND use deplixo.auth.requireLogin() in code\n"
@@ -353,6 +354,16 @@ async def deplixo_deploy(
     Costs 2 platform credits per email. Daily limit per app (5 free / 50 personal / 500 pro).
     Emails are wrapped in a branded template with the app's icon and title.
     App must be claimed to send emails. Do NOT use external email APIs — use deplixo.email.send().
+
+    ### Inbound Webhooks (receive events from external services)
+      // Listen for webhook events in real-time via SSE
+      deplixo.webhooks.on("github", function(payload) {
+        console.log("Got GitHub event:", payload);
+      });
+      // List past webhook payloads
+      const events = await deplixo.webhooks.list("github", { limit: 20 });
+    External services POST to: https://deplixo.com/hooks/{app-id}/{webhook-name}/
+    Payloads are stored in the per-app database and broadcast via SSE.
 
     ## Making Apps Functional — CRITICAL
 
