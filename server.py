@@ -100,7 +100,9 @@ mcp = FastMCP(
         "- App needs rich text editor -> use deplixo.editor(el) (contentEditable + toolbar)\n"
         "- App needs sharing -> use deplixo.share() (Web Share API + clipboard fallback)\n"
         "- App needs to send emails -> use deplixo.email.send() (Postmark, 2 credits/email)\n"
-        "- App needs access restriction -> pass `access_code` parameter (users must enter code to access the app)\n\n"
+        "- App needs access restriction -> pass `access_code` parameter (users must enter code to access the app)\n"
+        "- App needs user login/auth -> use deplixo.auth.requireLogin() (Deplixo accounts, Google/GitHub/email)\n"
+        "- App needs user accounts -> pass `auth_enabled=True` and use deplixo.auth.requireLogin()\n\n"
 
         "### Before building, ask clarifying questions if the request is ambiguous:\n"
         "- What data should the app work with?\n"
@@ -164,6 +166,8 @@ async def deplixo_deploy(
     merge_files: bool = False,
     icon: str = "",
     access_code: str | None = None,
+    auth_enabled: bool = False,
+    auth_allowed_domains: list[str] | None = None,
 ) -> str:
     """Deploy a web app to Deplixo and get a live URL.
 
@@ -489,6 +493,10 @@ async def deplixo_deploy(
                      apps in multiple calls.
         access_code: Optional shared access code. When set, visitors must enter
                      this code to view the app. Pass empty string to remove.
+        auth_enabled: When True, users must sign in with a Deplixo account
+                     (Google, GitHub, or email) to use this app.
+        auth_allowed_domains: Optional list of email domains allowed to sign in
+                             (e.g. ["company.com"]). Empty = any domain.
     """
     if not code and not files:
         return "Error: Either 'code' or 'files' must be provided."
@@ -514,6 +522,10 @@ async def deplixo_deploy(
         payload["icon"] = icon
     if access_code is not None:
         payload["access_code"] = access_code
+    if auth_enabled:
+        payload["auth_enabled"] = True
+    if auth_allowed_domains:
+        payload["auth_allowed_domains"] = auth_allowed_domains
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
