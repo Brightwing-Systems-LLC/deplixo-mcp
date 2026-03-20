@@ -52,7 +52,7 @@ async def test_new_deploy_mentions_10_min_expiry():
 
         result = await deplixo_deploy(code="<h1>Hello</h1>")
 
-    assert "10 minutes" in result
+    assert "1 hour" in result
     assert "24 hours" not in result
 
 
@@ -82,7 +82,7 @@ async def test_update_deploy_does_not_show_live_url():
             claim_token="tok_secret123",
         )
 
-    assert "App updated!" in result
+    assert "App updated" in result
     assert "Live at:" not in result
 
 

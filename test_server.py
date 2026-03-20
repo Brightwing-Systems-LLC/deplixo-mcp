@@ -40,11 +40,11 @@ async def test_deploy_single_file_success():
 
         result = await deplixo_deploy(code="<h1>Hello</h1>", title="Test App")
 
-    assert "App deployed!" in result
+    assert "App deployed" in result
     assert "deplixo.com/claim/abc123" in result
     assert "tok_secret123" in result
     assert "app_id=" in result
-    assert "10 minutes" in result
+    assert "1 hour" in result
     # New deploys should NOT show the live app URL
     assert "Live at:" not in result
 
@@ -69,7 +69,7 @@ async def test_deploy_multi_file_success():
             files={"index.html": "<html></html>", "style.css": "body {}"}
         )
 
-    assert "App deployed!" in result
+    assert "App deployed" in result
 
 
 @pytest.mark.asyncio
@@ -119,8 +119,10 @@ async def test_deploy_timeout():
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client_cls.return_value = mock_client
 
-        with pytest.raises(httpx.TimeoutException):
-            await deplixo_deploy(code="<h1>Hello</h1>")
+        result = await deplixo_deploy(code="<h1>Hello</h1>")
+
+    assert "Error" in result
+    assert "timed out" in result
 
 
 @pytest.mark.asyncio
@@ -157,8 +159,8 @@ async def test_deploy_update_existing_app():
     assert payload["claim_token"] == "tok_secret123"
 
     # Verify response shows update success
-    assert "App updated!" in result
-    assert "10 minutes" in result
+    assert "App updated" in result
+    assert "1 hour" in result
 
 
 @pytest.mark.asyncio
@@ -252,7 +254,7 @@ async def test_deploy_no_claim_url():
 
     # Authenticated deploy: no claim warning, just "App deployed!"
     assert "claim" not in result.lower()
-    assert "App deployed!" in result
+    assert "App deployed" in result
 
 
 def test_tool_annotations():

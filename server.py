@@ -57,6 +57,7 @@ def _format_suggestions(suggestions: dict) -> list[str]:
 
 mcp = FastMCP(
     "Deplixo",
+    stateless_http=True,
     instructions=(
         "Use the deplixo_deploy tool to deploy web apps to Deplixo. "
         "When the user asks you to deploy, share, host, or publish their app, "
@@ -628,11 +629,19 @@ async def deplixo_deploy(
     if cron:
         payload["cron"] = cron
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            f"{DEPLIXO_API_URL}/api/v1/deploy",
-            json=payload,
-        )
+    timeout = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                f"{DEPLIXO_API_URL}/api/v1/deploy",
+                json=payload,
+            )
+    except httpx.TimeoutException:
+        return "Error: Deploy request timed out. The app code may be too large — try deploying in chunks using merge_files=True."
+    except httpx.ConnectError:
+        return "Error: Could not connect to Deplixo API. Please try again in a moment."
+    except httpx.HTTPError as e:
+        return f"Error: HTTP request failed: {str(e)[:500]}"
 
     if response.status_code == 200:
         data = response.json()

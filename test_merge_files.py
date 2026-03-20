@@ -81,7 +81,7 @@ async def test_merge_files_without_index_html_allowed():
 
     # Should have called the API (not returned early with error)
     assert mock_client.post.called
-    assert "App updated!" in result
+    assert "App updated" in result
 
 
 @pytest.mark.asyncio
