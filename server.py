@@ -935,6 +935,201 @@ async def deplixo_read_source(url: str) -> str:
         return f"Error reading source: {str(e)[:500]}"
 
 
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+        idempotentHint=True,
+    )
+)
+async def deplixo_plan(
+    description: str,
+    constraints: dict | None = None,
+) -> str:
+    """Plan an app before building it. Returns clarifying questions and architecture recommendations.
+
+    Use this BEFORE writing code when the user's request is ambiguous or complex.
+    The response tells you which Deplixo primitives to use, whether the app should
+    be personal or multi-user, and what questions to ask the user.
+
+    Args:
+        description: What the user wants to build (their request in plain English)
+        constraints: Optional dict of known constraints, e.g. {"personal": true, "auth": true}
+    """
+    payload = {"description": description}
+    if constraints:
+        payload["constraints"] = constraints
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{DEPLIXO_API_URL}/api/v1/plan", json=payload)
+
+        if resp.status_code != 200:
+            return f"Planning failed (HTTP {resp.status_code}). Build the app using your best judgment."
+
+        data = resp.json()
+        parts = ["## App Plan\n"]
+
+        if data.get("pattern"):
+            parts.append(f"**Pattern**: {data['pattern']} app\n")
+
+        if data.get("clarifying_questions"):
+            parts.append("**Ask the user these questions before building:**")
+            for q in data["clarifying_questions"]:
+                parts.append(f"- {q}")
+            parts.append("")
+
+        if data.get("recommended_primitives"):
+            parts.append("**Recommended primitives:**")
+            for p in data["recommended_primitives"]:
+                parts.append(f"- {p}")
+            parts.append("")
+
+        if data.get("architecture_notes"):
+            parts.append(f"**Architecture**: {data['architecture_notes']}\n")
+
+        parts.append("Ask the clarifying questions, then build the app using the recommended primitives.")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Planning unavailable: {str(e)[:200]}. Build the app using your best judgment."
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+        idempotentHint=True,
+    )
+)
+async def deplixo_query(
+    app_id: str,
+    claim_token: str,
+    collection: str = "",
+    sql: str = "",
+    limit: int = 50,
+) -> str:
+    """Query data from a deployed Deplixo app.
+
+    Use this when the user asks about data in their app — "how many entries?",
+    "show me the feedback", "what are the top items?", etc.
+
+    Requires the claim_token from a previous deploy (proves ownership).
+
+    Args:
+        app_id: The app's hash ID (e.g. "abcd-efgh" from a previous deploy)
+        claim_token: The claim token from the deploy response (proves ownership)
+        collection: Name of the collection to query (e.g. "recipes", "tasks")
+        sql: Raw SQL query (alternative to collection — for power users)
+        limit: Max entries to return (default 50, max 200)
+    """
+    payload = {
+        "app_id": app_id,
+        "claim_token": claim_token,
+        "limit": min(limit, 200),
+    }
+    if collection:
+        payload["collection"] = collection
+    elif sql:
+        payload["sql"] = sql
+    else:
+        return "Error: Specify either 'collection' or 'sql' to query."
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{DEPLIXO_API_URL}/api/v1/query", json=payload)
+
+        if resp.status_code == 403:
+            return "Error: Invalid claim token. Make sure you're using the claim_token from the deploy response."
+        if resp.status_code != 200:
+            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            return f"Query failed: {data.get('error', resp.text[:500])}"
+
+        data = resp.json()
+        parts = [f"## Data from {data.get('app_id', app_id)}\n"]
+
+        if "collection" in data:
+            parts.append(f"**Collection**: {data['collection']} ({data.get('total', '?')} total entries)\n")
+            entries = data.get("entries", [])
+            if not entries:
+                parts.append("No entries found.")
+            else:
+                for entry in entries[:limit]:
+                    author = entry.get("author", {})
+                    author_name = author.get("name", "anonymous") if author else "anonymous"
+                    parts.append(f"- **{entry.get('id', '?')}** (by {author_name}): {entry.get('value', {})}")
+        elif "rows" in data:
+            parts.append(f"**SQL result**: {data.get('count', '?')} rows\n")
+            columns = data.get("columns", [])
+            rows = data.get("rows", [])
+            if columns:
+                parts.append("| " + " | ".join(str(c) for c in columns) + " |")
+                parts.append("| " + " | ".join("---" for _ in columns) + " |")
+            for row in rows[:limit]:
+                if isinstance(row, dict):
+                    parts.append("| " + " | ".join(str(v) for v in row.values()) + " |")
+
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Query failed: {str(e)[:300]}"
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+        idempotentHint=True,
+    )
+)
+async def deplixo_list_apps(
+    claim_token: str,
+) -> str:
+    """List all apps owned by the user. Requires a claim_token from any of their apps.
+
+    Use this when the user says "update my app" or "which apps do I have?" and
+    you need to find the right app_id and claim_token.
+
+    Args:
+        claim_token: A claim token from any of the user's apps (proves account ownership)
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{DEPLIXO_API_URL}/api/v1/apps/by-token",
+                params={"claim_token": claim_token},
+            )
+
+        if resp.status_code == 404:
+            return "Error: Invalid claim token. No app found with this token."
+        if resp.status_code != 200:
+            return f"Error listing apps (HTTP {resp.status_code})."
+
+        data = resp.json()
+        apps = data.get("apps", [])
+
+        if not apps:
+            return "No apps found."
+
+        parts = [f"## Your Apps ({len(apps)} total)\n"]
+        for app in apps:
+            title = app.get("title", "Untitled")
+            app_id = app.get("app_id", "?")
+            url = app.get("url", "")
+            token = app.get("claim_token", "")
+            parts.append(f"- **{title}** — {url}")
+            parts.append(f"  app_id=\"{app_id}\", claim_token=\"{token}\"")
+
+        parts.extend([
+            "",
+            "To update any app, use deplixo_deploy with the app_id and claim_token shown above.",
+        ])
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Error listing apps: {str(e)[:300]}"
+
+
 def main():
     mcp.run(transport="stdio")
 
