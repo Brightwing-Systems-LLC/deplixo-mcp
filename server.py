@@ -101,8 +101,27 @@ mcp = FastMCP(
         "- App needs sharing -> use deplixo.share() (Web Share API + clipboard fallback)\n"
         "- App needs to send emails -> use deplixo.email.send() (Postmark, 2 credits/email)\n"
         "- App needs access restriction -> pass `access_code` parameter (users must enter code to access the app)\n"
-        "- App needs user login/auth -> use deplixo.auth.requireLogin() (Deplixo accounts, Google/GitHub/email)\n"
-        "- App needs user accounts -> pass `auth_enabled=True` and use deplixo.auth.requireLogin()\n\n"
+        "- App needs user login/auth -> pass `auth_enabled=True` AND use deplixo.auth.requireLogin() in code\n"
+        "- App needs user accounts -> pass `auth_enabled=True` AND use deplixo.auth.requireLogin() in code\n"
+        "- NEVER build custom login forms — Deplixo handles auth via hosted login pages (Google/GitHub/email)\n\n"
+
+        "### Authentication (deplixo.auth)\n"
+        "When an app needs user accounts, you MUST do BOTH:\n"
+        "1. Pass `auth_enabled=True` in the deploy call (server-side gate)\n"
+        "2. Call `await deplixo.auth.requireLogin()` in the app code (gets user info)\n\n"
+        "SDK surface:\n"
+        "  const user = await deplixo.auth.requireLogin()  → {id, email, name, role} or redirects to login\n"
+        "  deplixo.auth.user          → current user object or null\n"
+        "  deplixo.auth.isAuthenticated → boolean\n"
+        "  deplixo.auth.logout()      → signs out and reloads\n"
+        "  deplixo.auth.onAuthChange(cb) → callback when auth state changes\n\n"
+        "Example — personal notes app:\n"
+        "  const user = await deplixo.auth.requireLogin();\n"
+        "  const notes = deplixo.db.collection('notes', { personal: true });\n"
+        "  // Each user sees only their own notes, synced across all their devices\n"
+        "  document.getElementById('greeting').textContent = `Hello, ${user.name}!`;\n\n"
+        "When auth is enabled, `{ personal: true }` collections scope to the authenticated\n"
+        "user's account (cross-device), not the browser cookie. This is the whole point.\n\n"
 
         "### Before building, ask clarifying questions if the request is ambiguous:\n"
         "- What data should the app work with?\n"
@@ -403,6 +422,9 @@ async def deplixo_deploy(
     - NEVER manually create <audio> elements for UI sounds — use deplixo.sound.play("@ping")
     - NEVER write CSV serialization by hand — use deplixo.export.csv(data, filename)
     - NEVER build a contentEditable editor from scratch — use deplixo.editor(el)
+    - NEVER build custom login/signup forms — use deplixo.auth.requireLogin() with auth_enabled=True
+    - When an app needs user accounts, ALWAYS pass auth_enabled=True in the deploy call AND
+      call `await deplixo.auth.requireLogin()` at app startup to get the user object
 
     ### Two patterns: Personal Apps vs Multi-User Apps
 
