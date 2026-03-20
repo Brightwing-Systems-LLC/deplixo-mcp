@@ -1,9 +1,11 @@
 """HTTP transport for the Deplixo MCP server."""
+from pathlib import Path
+
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response
+from starlette.responses import FileResponse, PlainTextResponse, Response
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 from mcp.server.transport_security import TransportSecuritySettings
@@ -54,6 +56,14 @@ mcp.settings.transport_security = TransportSecuritySettings(
 OPENAI_VERIFICATION_TOKEN = "d83b7MzyCoqobditKIKjryE5TYCv-fXc3C6Lj5a9wmA"
 
 
+FAVICON_PATH = Path(__file__).parent / "favicon.ico"
+
+
+async def favicon(request: Request) -> FileResponse:
+    """Serve favicon for domain verification."""
+    return FileResponse(FAVICON_PATH, media_type="image/x-icon")
+
+
 async def openai_apps_challenge(request: Request) -> PlainTextResponse:
     """OpenAI domain verification for ChatGPT App Directory."""
     return PlainTextResponse(OPENAI_VERIFICATION_TOKEN)
@@ -62,6 +72,7 @@ async def openai_apps_challenge(request: Request) -> PlainTextResponse:
 def create_app():
     """Create the Starlette app with CORS and request body limit middleware."""
     app = mcp.streamable_http_app()
+    app.routes.append(Route("/favicon.ico", favicon))
     app.routes.append(
         Route("/.well-known/openai-apps-challenge", openai_apps_challenge)
     )
