@@ -107,7 +107,7 @@ mcp = FastMCP(
         "- App needs user login/auth -> pass `auth_enabled=True` AND use deplixo.auth.requireLogin() in code\n"
         "- App needs user accounts -> pass `auth_enabled=True` AND use deplixo.auth.requireLogin() in code\n"
         "- App needs who's-online / presence -> use deplixo.presence.join/list/onChange (Redis-backed, real-time)\n"
-        "- App needs real-time messaging between users -> use deplixo.broadcast.send/on (ephemeral, no persistence)\n"
+        "- App needs real-time messaging between users -> use deplixo.db.collection() with onChange() for persistent chat, deplixo.broadcast.send/on for ephemeral signals only\n"
         "- App needs in-app notifications -> use deplixo.notifications.send/list/markRead (per-user, real-time)\n"
         "- App needs chat rooms / lobbies -> use deplixo.rooms.join/create/list (room-scoped collections + broadcast)\n"
         "- NEVER build custom login forms — Deplixo handles auth via hosted login pages (Google/GitHub/email)\n\n"
@@ -425,6 +425,28 @@ async def deplixo_deploy(
       const rooms = await deplixo.rooms.list();
       const newRoom = await deplixo.rooms.create({ name: "Game Room" });
     Rooms scope collections and broadcast to a namespace. Room data stored in _rooms collection.
+
+    ### Real-Time Best Practices (CRITICAL for chat / collaborative apps)
+    onChange() delivers events via SSE. Follow these rules to avoid duplicates and missed messages:
+
+    1. **Do NOT use optimistic rendering with onChange()**. When you call collection.add(),
+       do NOT immediately render the item in the UI. Instead, let the onChange() callback
+       handle ALL rendering — it fires for the sender too (~50-100ms latency, imperceptible).
+       Optimistic rendering causes duplicate messages when the SSE event races the HTTP response.
+
+    2. **Handle the "reconnect" action in onChange()**. When the SSE connection drops and
+       reconnects, onChange fires with `{ action: "reconnect" }`. Use this to refetch data:
+         collection.onChange(({ action }) => {
+           if (action === "reconnect") { loadMessages(); return; }
+           // ...handle add/update/remove normally
+         });
+
+    3. **Guard async channel/view switches**. If your app switches between views that
+       load data with `await collection.list()`, set a generation counter before the
+       await and check it after — discard stale loads if the user switched again.
+
+    4. **Use broadcast for ephemeral signals, collections for persistent data**.
+       Typing indicators, cursor positions → broadcast. Messages, posts → collections.
 
     ## Making Apps Functional — CRITICAL
 
