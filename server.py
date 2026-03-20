@@ -98,7 +98,9 @@ mcp = FastMCP(
         "- App needs YouTube/embed -> use deplixo.embed.youtube() / .codepen() / .iframe()\n"
         "- App needs camera -> use deplixo.camera.photo() (getUserMedia)\n"
         "- App needs rich text editor -> use deplixo.editor(el) (contentEditable + toolbar)\n"
-        "- App needs sharing -> use deplixo.share() (Web Share API + clipboard fallback)\n\n"
+        "- App needs sharing -> use deplixo.share() (Web Share API + clipboard fallback)\n"
+        "- App needs to send emails -> use deplixo.email.send() (Postmark, 2 credits/email)\n"
+        "- App needs access restriction -> pass `access_code` parameter (users must enter code to access the app)\n\n"
 
         "### Before building, ask clarifying questions if the request is ambiguous:\n"
         "- What data should the app work with?\n"
@@ -161,6 +163,7 @@ async def deplixo_deploy(
     claim_token: str = "",
     merge_files: bool = False,
     icon: str = "",
+    access_code: str | None = None,
 ) -> str:
     """Deploy a web app to Deplixo and get a live URL.
 
@@ -316,6 +319,17 @@ async def deplixo_deploy(
     ### Sharing (Web Share API + clipboard fallback)
       const result = await deplixo.share({ title: "My App", url: location.href });
       // result is "shared" (native) or "copied" (clipboard fallback)
+
+    ### Email (platform credits, claimed apps only)
+      const result = await deplixo.email.send({
+        to: "user@example.com",
+        subject: "Your receipt",
+        body: "Thanks for your order!",       // plain text
+        html: "<h1>Thanks!</h1><p>Order #123</p>"  // optional HTML (sanitized server-side)
+      });  // → { status: "sent", message_id, credits_used, credits_remaining }
+    Costs 2 platform credits per email. Daily limit per app (5 free / 50 personal / 500 pro).
+    Emails are wrapped in a branded template with the app's icon and title.
+    App must be claimed to send emails. Do NOT use external email APIs — use deplixo.email.send().
 
     ## Making Apps Functional — CRITICAL
 
@@ -473,6 +487,8 @@ async def deplixo_deploy(
         merge_files: When True on an update, only add/replace files in the payload
                      and keep all other existing files. Use this to deploy large
                      apps in multiple calls.
+        access_code: Optional shared access code. When set, visitors must enter
+                     this code to view the app. Pass empty string to remove.
     """
     if not code and not files:
         return "Error: Either 'code' or 'files' must be provided."
@@ -496,6 +512,8 @@ async def deplixo_deploy(
         payload["merge_files"] = True
     if icon:
         payload["icon"] = icon
+    if access_code is not None:
+        payload["access_code"] = access_code
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
