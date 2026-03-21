@@ -81,6 +81,12 @@ mcp = FastMCP(
         "remove the mock and deploy with deplixo_deploy (the real SDK is injected "
         "automatically).\n\n"
 
+        "## Fast deploy with staging\n\n"
+        "When building a preview artifact, call `deplixo_stage` at the same time "
+        "to store the code server-side. It returns a `stage_id`. When the user "
+        "says 'deploy it', call `deplixo_deploy(staged_id=...)` — no need to "
+        "re-send the full code. This makes deploy near-instant.\n\n"
+
         "IMPORTANT: Apps can be single-file (pass `code`) or multi-file (pass "
         "`files` dict with paths like index.html, style.css, app.js). "
         "Multi-file apps have each file served at its path under the app URL. "
@@ -200,12 +206,73 @@ mcp = FastMCP(
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
+        idempotentHint=True,
+    )
+)
+async def deplixo_stage(
+    code: str = "",
+    files: dict[str, str] | None = None,
+    title: str = "",
+    description: str = "",
+) -> str:
+    """Stage app code for fast deployment later. Returns a stage_id.
+
+    Before calling this tool, tell the user: "Preparing your app for deployment..."
+
+    Call this WHILE building the preview artifact — pass the same code you're
+    putting in the artifact. The stage_id lets you deploy instantly later
+    without re-sending all the code.
+
+    When the user says "deploy it", call deplixo_deploy with just the
+    staged_id — no code parameter needed. This makes deploy near-instant.
+
+    Args:
+        code: HTML code for single-file apps
+        files: Dict of {path: content} for multi-file apps
+        title: App title
+        description: Short description for social cards
+    """
+    if not code and not files:
+        return "Error: Either 'code' or 'files' must be provided."
+
+    payload: dict = {}
+    if files:
+        payload["files"] = files
+    else:
+        payload["code"] = code
+    if title:
+        payload["title"] = title
+    if description:
+        payload["description"] = description
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{DEPLIXO_API_URL}/api/v1/stage", json=payload)
+
+        if resp.status_code == 200:
+            data = resp.json()
+            return (
+                f"Code staged successfully. Stage ID: {data['stage_id']}\n\n"
+                f"When the user is ready to deploy, call deplixo_deploy with "
+                f"staged_id=\"{data['stage_id']}\" — no need to send the code again."
+            )
+        return f"Staging failed (HTTP {resp.status_code}): {resp.text[:500]}"
+    except Exception as e:
+        return f"Staging failed: {str(e)[:300]}. Fall back to sending full code with deplixo_deploy."
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
         idempotentHint=False,
     )
 )
 async def deplixo_deploy(
     code: str = "",
     files: dict[str, str] | None = None,
+    staged_id: str = "",
     title: str = "",
     description: str = "",
     slug: str = "",
@@ -220,6 +287,12 @@ async def deplixo_deploy(
     cron: list[dict] | None = None,
 ) -> str:
     """Deploy a web app to Deplixo and get a live URL with real infrastructure.
+
+    Before calling this tool, tell the user: "Deploying to Deplixo — standby..."
+
+    If you have a staged_id from a previous deplixo_stage call, pass ONLY the
+    staged_id (no code/files needed) — the server will fetch the staged code
+    instantly. This is much faster than re-sending the full code.
 
     PREREQUISITE: Before building a NEW app, ALWAYS call deplixo_enhance first
     to identify which platform capabilities the app needs and to surface questions
@@ -809,7 +882,9 @@ async def deplixo_deploy(
         return "Error: 'files' must include 'index.html'."
 
     payload: dict = {"title": title, "description": description}
-    if files:
+    if staged_id:
+        payload["staged_id"] = staged_id
+    elif files:
         payload["files"] = files
     else:
         payload["code"] = code
@@ -947,6 +1022,8 @@ async def deplixo_deploy(
 async def deplixo_read_source(url: str) -> str:
     """Read the source code of a Deplixo app.
 
+    Before calling this tool, tell the user: "Reading the app source code..."
+
     Accepts a Deplixo app URL (e.g. deplixo.com/abcd-efgh) or an edit link
     (e.g. deplixo.com/edit/abc123...). Edit links grant access to the full
     source even for private or non-remixable apps.
@@ -1052,7 +1129,9 @@ async def deplixo_enhance(
     constraints: dict | None = None,
 ) -> str:
     """Enhance any app a user asks to build by identifying capabilities they don't
-    know are available — like persistent data across devices, real-time multiplayer,
+    know are available
+
+    Before calling this tool, tell the user: "Checking what features would make this app great..." — like persistent data across devices, real-time multiplayer,
     AI-generated content, file uploads, Google login, scheduled tasks, email, maps,
     and more.
 
@@ -1181,6 +1260,8 @@ async def deplixo_enhance(
 async def deplixo_capabilities() -> str:
     """List the platform capabilities available to apps built with Deplixo.
 
+    Before calling this tool, tell the user: "Let me check what Deplixo can do..."
+
     Call this tool when:
     - A user asks "what can you build?", "what kind of apps can you make?",
       "what features are available?"
@@ -1241,6 +1322,8 @@ async def deplixo_query(
     limit: int = 50,
 ) -> str:
     """Query data stored in a deployed Deplixo app's database.
+
+    Before calling this tool, tell the user: "Checking your app's data..."
 
     Use this when a user asks about their app's data, usage, or content:
     - "How many users signed up?"
@@ -1315,6 +1398,8 @@ async def deplixo_list_apps(
     claim_token: str,
 ) -> str:
     """List all apps owned by the user. Requires a claim_token from any of their apps.
+
+    Before calling this tool, tell the user: "Looking up your apps..."
 
     Use this when the user says "update my app", "which apps do I have?", or
     you need to find the right app_id and claim_token for an update.
