@@ -67,26 +67,27 @@ mcp = FastMCP(
         "## When the user wants to deploy\n\n"
         "When the user says \"deploy\", \"make it live\", \"share it\", \"host it\", "
         "\"publish it\", or \"put it online\":\n\n"
-        "**Step 1 — ALWAYS call `deplixo_plan` first**: Before deploying, call "
-        "`deplixo_plan` with a description of the app. It returns clarifying questions "
-        "that you MUST ask the user before proceeding. Present them naturally — e.g. "
-        "\"Before I deploy this, a few quick questions:\\n"
-        "1. Should your data persist between sessions, or is this just a demo?\\n"
+        "**Step 1 — ALWAYS call `deplixo_plan` first to plan the deployment**: "
+        "Deploying to Deplixo gives the app real infrastructure — persistent data, "
+        "user accounts, email, scheduled tasks, etc. You MUST call `deplixo_plan` "
+        "before deploying to determine which infrastructure the app needs. It returns "
+        "deployment questions you MUST ask the user — e.g.:\n"
+        "\"Before I deploy this, I need to configure the right infrastructure:\\n"
+        "1. Should your data persist between sessions, or is this just a throwaway demo?\\n"
         "2. Will other people use this, or just you?\\n"
-        "3. Do you need user accounts (login)?\"\\n\\n"
-        "Wait for the user's answers before continuing.\n\n"
-        "**Step 2 — Rebuild with Deplixo primitives**: Based on the answers, rebuild "
-        "the app code to use Deplixo SDK features (deplixo.db.collection for data, "
-        "deplixo.auth for accounts, deplixo.email for email, etc.). Include the "
-        "preview shim so the user can verify it still works:\n"
-        "  <script src=\"https://deplixo.com/static/js/shim/deplixo-shim.js\"></script>\n"
-        "The shim makes all deplixo.* APIs work in-memory inside the artifact. Show "
-        "the updated app to the user for approval.\n\n"
-        "**Step 3 — Deploy**: Call deplixo_deploy with the final code. Remove the "
-        "shim script tag before deploying (Deplixo injects the real SDK automatically).\n\n"
-        "**Only exception**: If the user says \"build AND deploy\" in their very first "
-        "message AND the app is trivially simple (static page, no data), you may skip "
-        "the plan step. Otherwise, ALWAYS plan first.\n\n"
+        "3. Do you need user accounts (login with Google/GitHub/email)?\\n"
+        "4. Should it send any emails or notifications?\"\n\n"
+        "These are DEPLOYMENT decisions, not app design decisions — the user must "
+        "answer them before you can configure the infrastructure correctly. Wait for "
+        "their answers before continuing.\n\n"
+        "**Step 2 — Build for production**: Based on the answers, build (or rebuild) "
+        "the app code using Deplixo SDK features (deplixo.db.collection for persistent "
+        "data, deplixo.auth for accounts, deplixo.email for email, etc.).\n\n"
+        "**Step 3 — Deploy**: Call deplixo_deploy with the production code. If the "
+        "user had an artifact preview, remove any preview shim script tag before "
+        "deploying (Deplixo injects the real SDK automatically).\n\n"
+        "**Only exception**: Skip the plan step ONLY if the app is a trivially simple "
+        "static page with no data, no users, and no interactivity.\n\n"
         "The shim self-disables if the real SDK is already loaded, so accidentally "
         "leaving the tag in deployed code is harmless but remove it for cleanliness.\n\n"
 
@@ -953,14 +954,19 @@ async def deplixo_plan(
     description: str,
     constraints: dict | None = None,
 ) -> str:
-    """Plan an app before building it. Returns clarifying questions and architecture recommendations.
+    """Plan a deployment — determine what infrastructure the app needs before going live.
 
-    Use this BEFORE writing code when the user's request is ambiguous or complex.
-    The response tells you which Deplixo primitives to use, whether the app should
-    be personal or multi-user, and what questions to ask the user.
+    ALWAYS call this before deplixo_deploy. Deploying gives the app real
+    infrastructure (persistent database, user accounts, email, scheduled tasks,
+    etc.) and you need to know which features to enable. This tool analyzes the
+    app and returns deployment questions you MUST ask the user before proceeding.
+
+    Do NOT skip this step — deploying without planning may give the user an app
+    that loses data on refresh, doesn't support multiple users when it should,
+    or is missing features they need.
 
     Args:
-        description: What the user wants to build (their request in plain English)
+        description: What the app does (plain English description)
         constraints: Optional dict of known constraints, e.g. {"personal": true, "auth": true}
     """
     payload = {"description": description}
