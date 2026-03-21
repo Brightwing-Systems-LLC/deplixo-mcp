@@ -89,6 +89,9 @@ mcp = FastMCP(
         "deplixo_deploy does NOT accept code directly — you MUST stage first. "
         "Call deplixo_stage while building the preview artifact so the stage_id "
         "is ready when the user says 'deploy it'.\n\n"
+        "IMPORTANT: Re-stage every time you update the artifact. If the user "
+        "asks for changes, call deplixo_stage again with the updated code so "
+        "the stage_id always points to the latest version.\n\n"
 
         "IMPORTANT: Apps can be single-file (pass `code`) or multi-file (pass "
         "`files` dict with paths like index.html, style.css, app.js). "
