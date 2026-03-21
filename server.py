@@ -317,8 +317,12 @@ async def deplixo_deploy(
 
     The mock covers: collections (with localStorage persistence), auth (fake user),
     sound (no-op), AI (placeholder), uploads, email, notifications, presence,
-    broadcast, reactions, share, and export. When the user is happy with the
-    preview, remove the mock script and deploy with deplixo_deploy.
+    broadcast, reactions, share, and export.
+
+    When the user is happy and says to deploy: send the code AS-IS to
+    deplixo_deploy — do NOT rewrite the app or remove the mock. Deplixo
+    automatically strips the mock during deploy and injects the real SDK.
+    This saves time by avoiding a full rewrite between preview and deploy.
 
     Apps can be single-file or multi-file. For single-file apps, pass the HTML
     as `code`. For multi-file apps (separate CSS, JS, assets), pass a `files`
