@@ -69,6 +69,18 @@ mcp = FastMCP(
         "`deplixo_deploy`. Do NOT build a plain artifact when Deplixo features "
         "would benefit the app.\n\n"
 
+        "## Preview mode\n\n"
+        "If the user asks for a preview before deploying, or says 'show me first', "
+        "build the app as an artifact with an INLINE mock of the Deplixo SDK at the "
+        "TOP of the HTML (before any app code). The mock should implement "
+        "deplixo.db.collection (in-memory with localStorage), deplixo.auth "
+        "(fake user), deplixo.user, and any other deplixo.* APIs the app uses — "
+        "all backed by localStorage/in-memory so the preview works in the sandbox. "
+        "Do NOT use <script src='...'> for the mock — Claude artifacts block external "
+        "scripts. Write the mock inline as a <script> block. When the user is happy, "
+        "remove the mock and deploy with deplixo_deploy (the real SDK is injected "
+        "automatically).\n\n"
+
         "IMPORTANT: Apps can be single-file (pass `code`) or multi-file (pass "
         "`files` dict with paths like index.html, style.css, app.js). "
         "Multi-file apps have each file served at its path under the app URL. "
