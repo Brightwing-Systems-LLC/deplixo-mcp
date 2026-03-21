@@ -81,18 +81,6 @@ mcp = FastMCP(
         "remove the mock and deploy with deplixo_deploy (the real SDK is injected "
         "automatically).\n\n"
 
-        "## How deployment works (two-step: stage then deploy)\n\n"
-        "1. Call `deplixo_stage` with the app code — it stores the code server-side "
-        "and returns a `stage_id`.\n"
-        "2. When ready to deploy, call `deplixo_deploy(staged_id=...)` — this is "
-        "instant because the code is already on the server.\n\n"
-        "deplixo_deploy does NOT accept code directly — you MUST stage first. "
-        "Call deplixo_stage while building the preview artifact so the stage_id "
-        "is ready when the user says 'deploy it'.\n\n"
-        "IMPORTANT: Re-stage every time you update the artifact. If the user "
-        "asks for changes, call deplixo_stage again with the updated code so "
-        "the stage_id always points to the latest version.\n\n"
-
         "IMPORTANT: Apps can be single-file (pass `code`) or multi-file (pass "
         "`files` dict with paths like index.html, style.css, app.js). "
         "Multi-file apps have each file served at its path under the app URL. "
@@ -212,110 +200,34 @@ mcp = FastMCP(
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
-        idempotentHint=True,
-    )
-)
-async def deplixo_stage(
-    code: str = "",
-    files: dict[str, str] | None = None,
-    title: str = "",
-    description: str = "",
-    slug: str = "",
-    access_code: str | None = None,
-    auth_enabled: bool = False,
-    auth_allowed_domains: list[str] | None = None,
-    cron: list[dict] | None = None,
-) -> str:
-    """Stage app code for deployment. Returns a stage_id for instant deploy.
-
-    Before calling this tool, tell the user: "Preparing your app for deployment..."
-
-    ALWAYS call this before deplixo_deploy. Pass the app code here — the stage_id
-    lets deplixo_deploy work instantly without re-sending the full code.
-
-    Call this WHILE building the preview artifact — pass the same code you're
-    putting in the artifact. Include the inline Deplixo SDK mock in the code —
-    the server strips it automatically during deploy.
-
-    Args:
-        code: HTML code for single-file apps
-        files: Dict of {path: content} for multi-file apps
-        title: App title
-        description: Short description for social cards
-        slug: Optional URL slug
-        access_code: Optional access code to protect the app
-        auth_enabled: Whether to require Deplixo login
-        auth_allowed_domains: Restrict login to specific email domains
-        cron: Server-side scheduled tasks
-    """
-    if not code and not files:
-        return "Error: Either 'code' or 'files' must be provided."
-
-    payload: dict = {}
-    if files:
-        payload["files"] = files
-    else:
-        payload["code"] = code
-    if title:
-        payload["title"] = title
-    if description:
-        payload["description"] = description
-    if slug:
-        payload["slug"] = slug
-    if access_code is not None:
-        payload["access_code"] = access_code
-    if auth_enabled:
-        payload["auth_enabled"] = True
-    if auth_allowed_domains:
-        payload["auth_allowed_domains"] = auth_allowed_domains
-    if cron:
-        payload["cron"] = cron
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(f"{DEPLIXO_API_URL}/api/v1/stage", json=payload)
-
-        if resp.status_code == 200:
-            data = resp.json()
-            return (
-                f"Code staged successfully. Stage ID: {data['stage_id']}\n\n"
-                f"When the user is ready to deploy, call deplixo_deploy with "
-                f"staged_id=\"{data['stage_id']}\" — no need to send the code again."
-            )
-        return f"Staging failed (HTTP {resp.status_code}): {resp.text[:500]}"
-    except Exception as e:
-        return f"Staging failed: {str(e)[:300]}. Fall back to sending full code with deplixo_deploy."
-
-
-@mcp.tool(
-    annotations=ToolAnnotations(
-        readOnlyHint=False,
-        destructiveHint=False,
-        openWorldHint=True,
         idempotentHint=False,
     )
 )
 async def deplixo_deploy(
-    staged_id: str,
+    code: str = "",
+    files: dict[str, str] | None = None,
     title: str = "",
     description: str = "",
     slug: str = "",
     remixed_from: str = "",
     app_id: str = "",
     claim_token: str = "",
+    merge_files: bool = False,
     icon: str = "",
     access_code: str | None = None,
     auth_enabled: bool = False,
     auth_allowed_domains: list[str] | None = None,
     cron: list[dict] | None = None,
 ) -> str:
-    """Deploy a staged app to Deplixo and get a live URL with real infrastructure.
+    """Deploy a web app to Deplixo and get a live URL with real infrastructure.
 
-    Before calling this tool, tell the user: "Deploying to Deplixo — standby..."
+    Before calling this tool, tell the user: "Deploying to Deplixo — this takes
+    about a minute. Please don't interrupt or navigate away until you see the
+    claim link!"
 
-    REQUIRES a staged_id from a previous deplixo_stage call. Call deplixo_stage
-    first with the app code, then call this with the returned staged_id.
-    This makes deploy near-instant since the code is already on the server.
+    Send the app code as-is from the preview artifact — include the inline
+    Deplixo SDK mock if present. The server strips it automatically and injects
+    the real SDK.
 
     PREREQUISITE: Before building a NEW app, ALWAYS call deplixo_enhance first
     to identify which platform capabilities the app needs and to surface questions
@@ -904,7 +816,14 @@ async def deplixo_deploy(
     if files and "index.html" not in files and not (merge_files and app_id):
         return "Error: 'files' must include 'index.html'."
 
-    payload: dict = {"title": title, "description": description, "staged_id": staged_id}
+    if not code and not files:
+        return "Error: Either 'code' or 'files' must be provided."
+
+    payload: dict = {"title": title, "description": description}
+    if files:
+        payload["files"] = files
+    else:
+        payload["code"] = code
     if slug:
         payload["slug"] = slug
     if remixed_from:
