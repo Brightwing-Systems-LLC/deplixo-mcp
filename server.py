@@ -7,6 +7,24 @@ from mcp.types import ToolAnnotations
 DEPLIXO_API_URL = os.environ.get("DEPLIXO_API_URL", "https://deplixo.com")
 
 
+def _format_production_features(features: list[dict]) -> list[str]:
+    """Format production features into human-readable lines for the deploy response."""
+    if not features:
+        return []
+    lines = [
+        "",
+        "## Features to test on the live app",
+        "",
+        "These features only work on the deployed version (they were simulated in the preview):",
+        "",
+    ]
+    for f in features:
+        lines.append(f"- **{f['feature']}**: {f['test']}")
+    lines.append("")
+    lines.append("Try opening the link on your phone and your computer at the same time!")
+    return lines
+
+
 def _format_suggestions(suggestions: dict) -> list[str]:
     """Format code analysis suggestions into human-readable text lines."""
     lines = ["", "⚠ This app has issues that need fixing:"]
@@ -868,6 +886,7 @@ async def deplixo_deploy(
         claim_url = data.get("claim_url")
 
         suggestions = data.get("suggestions")
+        prod_features = data.get("production_features", [])
 
         if updated:
             # App was updated in-place (same URL)
@@ -894,6 +913,8 @@ async def deplixo_deploy(
             parts.append(update_line)
             if suggestions:
                 parts.extend(_format_suggestions(suggestions))
+            if prod_features:
+                parts.extend(_format_production_features(prod_features))
             return "\n".join(parts)
 
         # --- First deploy of this app ---
@@ -927,6 +948,8 @@ async def deplixo_deploy(
                 ])
             if suggestions:
                 parts.extend(_format_suggestions(suggestions))
+            if prod_features:
+                parts.extend(_format_production_features(prod_features))
             return "\n".join(parts)
         else:
             # App was deployed by an authenticated user (already claimed)
@@ -941,6 +964,8 @@ async def deplixo_deploy(
                 ])
             if suggestions:
                 parts.extend(_format_suggestions(suggestions))
+            if prod_features:
+                parts.extend(_format_production_features(prod_features))
             return "\n".join(parts)
     else:
         error_text = response.text[:5000] if len(response.text) > 5000 else response.text
