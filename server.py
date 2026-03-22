@@ -92,6 +92,15 @@ mcp = FastMCP(
         "`deplixo_deploy`. Do NOT build a plain artifact when Deplixo features "
         "would benefit the app.\n\n"
 
+        "## App structure\n\n"
+        "Apps can be single-file (pass `code`) or multi-file (pass `files` "
+        "dict with paths like index.html, style.css, app.js). "
+        "Multi-file apps have each file served at its path under the app URL. "
+        "For React apps, use CDN imports (unpkg.com/react, unpkg.com/react-dom, "
+        "unpkg.com/@babel/standalone) with <script type=\"text/babel\"> — do NOT "
+        "use npm, create-react-app, Vite, or any build tools. "
+        "For Vue, Svelte, Three.js, etc., use their CDN builds the same way.\n\n"
+
         "## Preview mode\n\n"
         "If the user asks for a preview before deploying, or says 'show me first', "
         "build the app as an artifact with an INLINE mock of the Deplixo SDK at the "
@@ -103,14 +112,76 @@ mcp = FastMCP(
         "scripts. Write the mock inline as a <script> block. When the user is happy, "
         "remove the mock and deploy with deplixo_deploy (the real SDK is injected "
         "automatically).\n\n"
-
-        "IMPORTANT: Apps can be single-file (pass `code`) or multi-file (pass "
-        "`files` dict with paths like index.html, style.css, app.js). "
-        "Multi-file apps have each file served at its path under the app URL. "
-        "For React apps, use CDN imports (unpkg.com/react, unpkg.com/react-dom, "
-        "unpkg.com/@babel/standalone) with <script type=\"text/babel\"> — do NOT "
-        "use npm, create-react-app, Vite, or any build tools. "
-        "For Vue, Svelte, Three.js, etc., use their CDN builds the same way.\n\n"
+        "Example inline mock:\n\n"
+        "    <script>\n"
+        "    // Deplixo SDK mock for in-chat preview\n"
+        "    (function() {\n"
+        "      var _store = {};\n"
+        "      window.deplixo = {\n"
+        "        user: { id: 'preview-user', name: 'Preview User' },\n"
+        "        ready: Promise.resolve(),\n"
+        "        ensureIdentity: function() { return Promise.resolve(); },\n"
+        "        auth: {\n"
+        "          user: { id: 'preview-user', email: 'you@preview', name: 'You', role: 'user' },\n"
+        "          isAuthenticated: true,\n"
+        "          requireLogin: function() { return Promise.resolve(this.user); },\n"
+        "          logout: function() {},\n"
+        "          onAuthChange: function() {}\n"
+        "        },\n"
+        "        db: {\n"
+        "          collection: function(name, opts) {\n"
+        "            var key = '_preview_' + name;\n"
+        "            function getAll() { try { return JSON.parse(localStorage.getItem(key)) || []; } catch(e) { return []; } }\n"
+        "            function saveAll(arr) { localStorage.setItem(key, JSON.stringify(arr)); }\n"
+        "            var listeners = [];\n"
+        "            return {\n"
+        "              add: function(val) {\n"
+        "                var entry = { id: Date.now().toString(36), value: val, author: { id: 'preview-user', name: 'You' } };\n"
+        "                var all = getAll(); all.unshift(entry); saveAll(all);\n"
+        "                listeners.forEach(function(fn) { try { fn({ action:'add', id:entry.id, value:val, author:entry.author }); } catch(e){} });\n"
+        "                return Promise.resolve(entry);\n"
+        "              },\n"
+        "              list: function(opts) { return Promise.resolve(getAll()); },\n"
+        "              get: function(id) { return Promise.resolve(getAll().find(function(e) { return e.id === id; }) || null); },\n"
+        "              update: function(id, val) {\n"
+        "                var all = getAll();\n"
+        "                for (var i = 0; i < all.length; i++) { if (all[i].id === id) { all[i].value = val; break; } }\n"
+        "                saveAll(all);\n"
+        "                listeners.forEach(function(fn) { try { fn({ action:'update', id:id, value:val }); } catch(e){} });\n"
+        "                return Promise.resolve({ id: id, value: val });\n"
+        "              },\n"
+        "              remove: function(id) {\n"
+        "                var all = getAll().filter(function(e) { return e.id !== id; });\n"
+        "                saveAll(all);\n"
+        "                listeners.forEach(function(fn) { try { fn({ action:'remove', id:id }); } catch(e){} });\n"
+        "                return Promise.resolve({ status: 'deleted' });\n"
+        "              },\n"
+        "              count: function() { return Promise.resolve(getAll().length); },\n"
+        "              onChange: function(fn) { listeners.push(fn); },\n"
+        "              offChange: function(fn) { if(fn) listeners = listeners.filter(function(f){return f!==fn;}); else listeners=[]; },\n"
+        "              search: function(q) { var all=getAll(); return Promise.resolve(all.filter(function(e){return JSON.stringify(e.value).toLowerCase().indexOf(q.toLowerCase())!==-1;})); },\n"
+        "              history: function() { return Promise.resolve([]); },\n"
+        "              activity: function() { return Promise.resolve([]); }\n"
+        "            };\n"
+        "          }\n"
+        "        },\n"
+        "        sound: { play: function(){}, load: function(){}, stop: function(){} },\n"
+        "        ai: { prompt: function() { return Promise.resolve('[AI response - works when deployed]'); }, stream: function() { return Promise.resolve({ [Symbol.asyncIterator]: function() { return { next: function() { return Promise.resolve({ done: true }); } }; } }); } },\n"
+        "        upload: function() { return Promise.resolve({ url: '', filename: 'preview.png', size: 0 }); },\n"
+        "        uploads: { list: function() { return Promise.resolve([]); }, delete: function() { return Promise.resolve(); } },\n"
+        "        email: { send: function() { return Promise.resolve({ status: 'sent', _preview: true }); } },\n"
+        "        notifications: { send: function() { return Promise.resolve({}); }, list: function() { return Promise.resolve({ notifications: [], unread_count: 0 }); }, markRead: function() { return Promise.resolve(); }, onChange: function() {} },\n"
+        "        presence: { join: function() { return Promise.resolve({ users: [] }); }, leave: function() { return Promise.resolve(); }, list: function() { return Promise.resolve([]); }, onChange: function() {} },\n"
+        "        broadcast: { send: function() { return Promise.resolve(); }, on: function() {}, off: function() {} },\n"
+        "        reactions: { toggle: function() { return Promise.resolve({ toggled: true, counts: {} }); }, get: function() { return Promise.resolve({ counts: {}, user_reactions: [] }); }, onChange: function() {} },\n"
+        "        share: function() { return Promise.resolve('copied'); },\n"
+        "        export: { csv: function(){}, json: function(){}, file: function(){} }\n"
+        "      };\n"
+        "    })();\n"
+        "    </script>\n\n"
+        "When the user is happy and says to deploy: send the code AS-IS to "
+        "deplixo_deploy — do NOT rewrite the app or remove the mock. Deplixo "
+        "automatically strips the mock during deploy and injects the real SDK.\n\n"
 
         "## Build FUNCTIONAL apps, not stubs\n\n"
         "Deplixo apps have a full SDK injected automatically (`window.deplixo`). "
@@ -128,7 +199,7 @@ mcp = FastMCP(
         "- CSV export: use `deplixo.export.csv()` — do NOT write manual CSV serialization\n"
         "- PDF export: use `deplixo.pdf.create()` — do NOT include html2pdf manually\n\n"
 
-        "### How to replace common stubs:\n"
+        "### How to replace common stubs\n"
         "- App needs AI/LLM calls -> use deplixo.ai.prompt() (platform credits, no API key needed)\n"
         "- App needs to save data -> use deplixo.db.collection() (real-time, cross-device sync)\n"
         "- App needs external APIs -> use deplixo.proxy() with ${SECRET_NAME} placeholders\n"
@@ -158,62 +229,277 @@ mcp = FastMCP(
         "- App needs chat rooms / lobbies -> use deplixo.rooms.join/create/list (room-scoped collections + broadcast)\n"
         "- NEVER build custom login forms — Deplixo handles auth via hosted login pages (Google/GitHub/email)\n\n"
 
+        "### NEVER do this\n"
+        "- `// TODO: implement API call` -> Use deplixo.ai.prompt() or deplixo.proxy()\n"
+        "- `return hardcodedSampleData` -> Wire to a real data source\n"
+        "- `function search() { /* implement later */ }` -> Implement it now\n"
+        "- `alert(\"Feature coming soon\")` -> Either build it or don't include the button\n\n"
+
+        "### ALWAYS do this\n"
+        "- If the app generates content (names, stories, quizzes, plans, recipes):\n"
+        "  -> Use deplixo.ai.prompt() with a specific system prompt and the user's input\n"
+        "- If the app searches or looks up information:\n"
+        "  -> Use deplixo.ai.prompt() with instructions to return structured results\n"
+        "  -> OR use deplixo.proxy() to call a real API\n"
+        "- If the app collects and saves data:\n"
+        "  -> Use deplixo.db.collection() with appropriate personal/multi-user mode\n"
+        "- If the app needs user-specific state:\n"
+        "  -> Use deplixo.db.collection(\"state\", { personal: true }) — NOT localStorage\n"
+        "- If the app has a \"calculate\" or \"analyze\" button:\n"
+        "  -> Implement the actual logic in JavaScript, or use deplixo.ai.prompt()\n\n"
+
+        "### Example: Brand Name Generator (the RIGHT way)\n"
+        "Instead of returning hardcoded names, wire the form to deplixo.ai.prompt():\n\n"
+        "    async function generateNames(businessInfo) {\n"
+        "      const result = await deplixo.ai.prompt({\n"
+        "        system: \"You are a branding expert. Generate 10 creative brand names. Return JSON: { names: [{ name, tagline, reasoning }] }\",\n"
+        "        user: `Business: ${businessInfo.description}\\nValues: ${businessInfo.values}`,\n"
+        "        json: true\n"
+        "      });\n"
+        "      return result.names;\n"
+        "    }\n\n"
+
+        "## Deplixo SDK Reference\n\n"
+        "Every deployed app gets `window.deplixo` with these APIs:\n\n"
+
+        "### Collections (shared data)\n"
+        "All data is shared across ALL visitors in real-time.\n"
+        "ALWAYS pass { personal: true } or { personal: false } (see patterns below).\n"
+        "  const recipes = deplixo.db.collection(\"recipes\", { personal: false });\n"
+        "  await recipes.add({ title: \"Pasta\", photo: url })  -> { id, value }\n"
+        "  await recipes.list()                                -> [{ id, value, author }]\n"
+        "  await recipes.get(id)                               -> { id, value, author }\n"
+        "  await recipes.update(id, { title: \"New\" })          -> merges fields\n"
+        "  await recipes.remove(id)                             -> deletes item\n"
+        "  recipes.onChange(({ action, id, value, author }) => { })  -> real-time SSE\n"
+        "  recipes.offChange(handler)                               -> remove specific listener\n"
+        "  recipes.offChange()                                      -> remove all listeners\n\n"
+
+        "### File Uploads\n"
+        "  const result = await deplixo.upload(file)  -> { url, filename, size }\n"
+        "  await deplixo.uploads.list()               -> [{ filename, url, size }]\n"
+        "  await deplixo.uploads.delete(filename)\n"
+        "Upload first, then store the URL in a collection entry.\n"
+        "Max 5MB per file. Do NOT use base64, data URLs, or FileReader.readAsDataURL().\n\n"
+
+        "### Identity\n"
+        "  deplixo.user  -> { id, name } for the current visitor\n"
+        "  await deplixo.ensureIdentity()  -> prompts for display name (multi-user apps only)\n"
+        "  NOTE: MUST always pass the `personal` option when creating a collection:\n"
+        "  - Personal apps: `deplixo.db.collection(\"state\", { personal: true })`\n"
+        "  - Multi-user apps: `deplixo.db.collection(\"recipes\", { personal: false })`\n\n"
+
         "### Authentication (deplixo.auth)\n"
         "When an app needs user accounts, you MUST do BOTH:\n"
         "1. Pass `auth_enabled=True` in the deploy call (server-side gate)\n"
         "2. Call `await deplixo.auth.requireLogin()` in the app code (gets user info)\n\n"
         "SDK surface:\n"
-        "  const user = await deplixo.auth.requireLogin()  → {id, email, name, role} or redirects to login\n"
-        "  deplixo.auth.user          → current user object or null\n"
-        "  deplixo.auth.isAuthenticated → boolean\n"
-        "  deplixo.auth.logout()      → signs out and reloads\n"
-        "  deplixo.auth.onAuthChange(cb) → callback when auth state changes\n\n"
-        "Example — personal notes app:\n"
-        "  const user = await deplixo.auth.requireLogin();\n"
-        "  const notes = deplixo.db.collection('notes', { personal: true });\n"
-        "  // Each user sees only their own notes, synced across all their devices\n"
-        "  document.getElementById('greeting').textContent = `Hello, ${user.name}!`;\n\n"
+        "  const user = await deplixo.auth.requireLogin()  -> {id, email, name, role} or redirects to login\n"
+        "  deplixo.auth.user          -> current user object or null\n"
+        "  deplixo.auth.isAuthenticated -> boolean\n"
+        "  deplixo.auth.logout()      -> signs out and reloads\n"
+        "  deplixo.auth.onAuthChange(cb) -> callback when auth state changes\n\n"
         "When auth is enabled, `{ personal: true }` collections scope to the authenticated\n"
-        "user's account (cross-device), not the browser cookie. This is the whole point.\n\n"
+        "user's account (cross-device), not the browser cookie.\n\n"
 
-        "### Before building, ask clarifying questions if the request is ambiguous:\n"
+        "### Proxy (call external APIs with server-side secrets)\n"
+        "  const data = await deplixo.proxy(url, { method, headers, body })\n"
+        "  -> { status: 200, body: { ... } }\n"
+        "Secrets are resolved server-side: use ${SECRET_NAME} in headers or body.\n"
+        "NEVER embed API keys in HTML/JS source. Use deplixo.proxy() with secrets.\n\n"
+
+        "### AI (platform-managed LLM access)\n"
+        "  const answer = await deplixo.ai.prompt(\"Generate 5 quiz questions\")\n"
+        "  const result = await deplixo.ai.prompt({ system: \"...\", user: \"...\", json: true })\n"
+        "  const stream = deplixo.ai.stream(\"Write a story\");\n"
+        "  for await (const chunk of stream) { outputEl.textContent += chunk; }\n"
+        "No API key needed — uses the app owner's platform credits.\n"
+        "NEVER embed LLM API keys in source code.\n\n"
+
+        "### Charts (Chart.js 4.x, lazy-loaded)\n"
+        "  const chart = await deplixo.chart(containerEl, {\n"
+        "    type: \"bar\", data: { labels: [\"A\",\"B\"], datasets: [{ data: [10,20] }] }\n"
+        "  });\n\n"
+
+        "### Maps (Leaflet 1.9, lazy-loaded)\n"
+        "  const map = await deplixo.map(containerEl, { center: [40.7, -74], zoom: 12 });\n"
+        "  map.addMarker(40.7, -74, \"New York\");\n"
+        "  const pos = await deplixo.location.get();  -> { lat, lng, accuracy }\n\n"
+
+        "### QR Codes (qr-creator, lazy-loaded)\n"
+        "  await deplixo.qr.generate(el, \"https://example.com\", { size: 200 });\n"
+        "  const dataUrl = await deplixo.qr.toDataURL(\"https://example.com\");\n"
+        "  const text = await deplixo.qr.scan();  // Camera-based scan\n\n"
+
+        "### PDF Export (html2pdf.js, lazy-loaded)\n"
+        "  await deplixo.pdf.create(el, { filename: \"report.pdf\" });\n"
+        "  const iframe = await deplixo.pdf.preview(el, container);\n\n"
+
+        "### Sound (Web Audio synth, no CDN)\n"
+        "  deplixo.sound.play(\"@ping\");   // 8 built-ins: ping, pop, click, ding, error, success, whoosh, beep\n"
+        "  await deplixo.sound.load(\"alert\", \"/my-sound.mp3\");\n"
+        "  deplixo.sound.play(\"alert\"); deplixo.sound.stop(\"alert\");\n\n"
+
+        "### Export (CSV, JSON, file download)\n"
+        "  deplixo.export.csv(data, \"report.csv\");\n"
+        "  deplixo.export.json(data, \"data.json\");\n"
+        "  deplixo.export.file(\"notes.txt\", content);\n"
+        "  const dataUrl = await deplixo.export.screenshot(el);\n\n"
+
+        "### Embeds (YouTube, CodePen, iframe)\n"
+        "Two modes: pass an element to append, OR pass null to get an HTML string.\n"
+        "  deplixo.embed.youtube(containerEl, \"dQw4w9WgXcQ\", { autoplay: true });\n"
+        "  card.innerHTML = `<div>${deplixo.embed.youtube(null, videoUrl)}</div>`;\n"
+        "  deplixo.embed.codepen(el, url, { theme: \"dark\" });\n"
+        "  deplixo.embed.iframe(el, url, { height: \"400\" });\n"
+        "ALWAYS use deplixo.embed.youtube() instead of raw <iframe> tags.\n\n"
+
+        "### Camera\n"
+        "  // Live viewfinder:\n"
+        "  const cam = await deplixo.camera.start(previewEl, { facing: \"user\" });\n"
+        "  const blob = await cam.capture();  cam.stop();\n"
+        "  // One-shot capture:\n"
+        "  const blob = await deplixo.camera.photo({ facing: \"environment\" });\n"
+        "  const qrText = await deplixo.camera.scan();\n\n"
+
+        "### Rich Text Editor\n"
+        "  const editor = deplixo.editor(containerEl, { placeholder: \"Write here...\" });\n"
+        "  editor.getContent(); editor.setContent(\"<b>Hello</b>\"); editor.onChange(html => { });\n\n"
+
+        "### Sharing (Web Share API + clipboard fallback)\n"
+        "  const result = await deplixo.share({ title: \"My App\", url: location.href });\n\n"
+
+        "### Email (platform credits, activated apps only)\n"
+        "  const result = await deplixo.email.send({ to: \"user@example.com\", subject: \"...\", body: \"...\", html: \"...\" });\n"
+        "  Costs 2 credits/email. Daily limit per app (5 free / 50 personal / 500 pro).\n"
+        "  await deplixo.email.register(\"user@example.com\", \"Jane\")  // opt-in\n"
+        "  const isOpted = await deplixo.email.isRegistered(\"user@example.com\")\n\n"
+
+        "### Inbound Webhooks\n"
+        "  deplixo.webhooks.on(\"github\", function(payload) { ... });\n"
+        "  const events = await deplixo.webhooks.list(\"github\", { limit: 20 });\n"
+        "External services POST to: https://deplixo.com/hooks/{app-id}/{webhook-name}/\n\n"
+
+        "### Broadcast (ephemeral real-time messages)\n"
+        "  deplixo.broadcast.send(\"cursor-move\", { x: 100, y: 200 });\n"
+        "  deplixo.broadcast.on(\"cursor-move\", (data, senderId) => { ... });\n"
+        "  deplixo.broadcast.off(\"cursor-move\");\n"
+        "Messages are ephemeral — not stored. Rate limit: 20/sec. Max: 4KB.\n\n"
+
+        "### Scheduled Tasks (server-side cron jobs)\n"
+        "Pass a `cron` parameter when deploying. These run even when nobody has the app open.\n"
+        "  cron=[{\"name\": \"daily-quote\", \"schedule\": \"0 9 * * *\", \"action\": \"event\", \"config\": {\"event_type\": \"new-quote\"}}]\n"
+        "Actions: event, clear-collection, trim-collection, random-pick, fetch.\n"
+        "Client SDK: deplixo.cron.list(), .pause(name), .resume(name).\n"
+        "Limits: Free 3 jobs, Personal 10, Pro 50. Min interval: 5 minutes.\n\n"
+
+        "### Presence (who's online)\n"
+        "  await deplixo.presence.join({ name: \"Alice\", status: \"online\" });\n"
+        "  const users = await deplixo.presence.list();\n"
+        "  deplixo.presence.onChange(({ action, userId, data }) => { });\n"
+        "  deplixo.presence.leave();\n"
+        "Heartbeat every 15s, removed after 30s of no heartbeat.\n\n"
+
+        "### Notifications (per-user in-app)\n"
+        "  await deplixo.notifications.send(\"user123\", { title: \"...\", body: \"...\", type: \"message\" });\n"
+        "  const { items, unread_count } = await deplixo.notifications.list({ unread_only: true });\n"
+        "  await deplixo.notifications.markRead([notifId]);\n"
+        "  deplixo.notifications.onChange((notif) => { });\n\n"
+
+        "### Rooms (namespaced multiplayer)\n"
+        "  const room = deplixo.rooms.join(\"lobby-1\");\n"
+        "  const notes = room.collection(\"messages\", { personal: false });\n"
+        "  room.broadcast.send(\"typing\", { user: \"Alice\" });\n"
+        "  room.broadcast.on(\"typing\", (data) => { });\n"
+        "  const rooms = await deplixo.rooms.list();\n"
+        "  const newRoom = await deplixo.rooms.create({ name: \"Game Room\" });\n\n"
+
+        "## Multi-Channel Chat Pattern\n\n"
+        "For apps with multiple channels/rooms that users switch between, use ONE global "
+        "messages collection with a channelId field — do NOT create per-channel collections "
+        "or per-channel rooms. This avoids listener accumulation on channel switch.\n\n"
+        "CORRECT pattern — single collection, filter in onChange:\n"
+        "  const msgColl = deplixo.db.collection(\"messages\", { personal: false });\n"
+        "  msgColl.onChange(({ action, id, value, author }) => {\n"
+        "    if (action === \"reconnect\") { loadCurrentChannel(); return; }\n"
+        "    if (action === \"add\") {\n"
+        "      if (value.channelId === currentChannelId) appendMessage({ id, value, author });\n"
+        "      else { unreadCounts[value.channelId]++; renderChannelList(); }\n"
+        "    }\n"
+        "  });\n"
+        "  await msgColl.add({ channelId: currentChannelId, text, ts: Date.now() });\n\n"
+        "Use Rooms only when users are in ONE room at a time (game lobbies, video calls).\n\n"
+
+        "## Real-Time Best Practices\n\n"
+        "1. Do NOT use optimistic rendering with onChange(). Let onChange() handle ALL "
+        "rendering — it fires for the sender too (~50-100ms latency).\n"
+        "2. Handle the \"reconnect\" action in onChange() — refetch data on reconnect.\n"
+        "3. Guard async view switches with a generation counter.\n"
+        "4. Clean up listeners: call offChange(handler) before switching contexts.\n"
+        "5. Use broadcast for ephemeral signals, collections for persistent data.\n\n"
+
+        "## Two patterns: Personal vs Multi-User\n\n"
+        "CRITICAL: Choose the right pattern. ALWAYS pass `personal` explicitly.\n\n"
+        "**Personal app** (one person, multiple devices — tracker, journal, todo):\n"
+        "- MUST pass `{ personal: true }`: `deplixo.db.collection(\"state\", { personal: true })`\n"
+        "- Use ONE shared record. Do NOT filter by deplixo.user.id.\n"
+        "- Do NOT use ensureIdentity or require a display name.\n\n"
+        "Example — Personal Progress Tracker:\n"
+        "  const store = deplixo.db.collection(\"state\", { personal: true });\n"
+        "  let appState = {}, recordId = null;\n"
+        "  async function loadState() {\n"
+        "    const items = await store.list();\n"
+        "    if (items.length > 0) { recordId = items[0].id; appState = items[0].value; }\n"
+        "    render(appState);\n"
+        "  }\n"
+        "  async function saveState(newState) {\n"
+        "    appState = newState;\n"
+        "    if (recordId) await store.update(recordId, newState);\n"
+        "    else { const r = await store.add(newState); recordId = r.id; }\n"
+        "  }\n"
+        "  store.onChange(() => loadState());\n"
+        "  loadState();\n\n"
+        "**Multi-user app** (multiple people — chat, shared list, scoreboard):\n"
+        "- MUST pass `{ personal: false }`: `deplixo.db.collection(\"recipes\", { personal: false })`\n"
+        "- Each person adds entries via .add() — author is tracked.\n"
+        "- Identity modal prompts for display name on first write.\n\n"
+
+        "## IMPORTANT RULES\n\n"
+        "- ALWAYS use deplixo.db.collection() for ANY persistent data — even for single-user apps. localStorage does NOT sync across devices.\n"
+        "- NEVER use localStorage. Always use deplixo.db.collection() instead.\n"
+        "- NEVER use base64/data URLs for images — use deplixo.upload()\n"
+        "- NEVER embed API keys in HTML/JS — use deplixo.proxy() with ${SECRET_NAME}\n"
+        "- NEVER embed LLM API keys — use deplixo.ai.prompt() (uses platform credits)\n"
+        "- NEVER include Chart.js/Leaflet/html2canvas/html2pdf/qr-creator via <script> tags — use deplixo.chart(), deplixo.map(), etc.\n"
+        "- NEVER manually create <audio> elements — use deplixo.sound.play(\"@ping\")\n"
+        "- NEVER write CSV serialization by hand — use deplixo.export.csv()\n"
+        "- NEVER build a contentEditable editor from scratch — use deplixo.editor(el)\n"
+        "- NEVER build custom login/signup forms — use deplixo.auth.requireLogin()\n"
+        "- NEVER use setInterval/setTimeout for recurring server tasks — use the `cron` deploy parameter\n"
+        "- Collections are shared across ALL visitors automatically\n"
+        "- Real-time updates work via .onChange() — ALWAYS use it to re-render on changes\n"
+        "- If the user's existing code uses localStorage, REWRITE it to use deplixo.db.collection()\n\n"
+
+        "## Before building, ask clarifying questions if the request is ambiguous\n"
         "- What data should the app work with?\n"
         "- What should the main action actually do?\n"
         "- Should results be saved, shared, or exported?\n"
         "Getting clarity upfront produces much better apps than guessing.\n\n"
 
-        "ALWAYS include a `description` when deploying — a 1-2 sentence summary "
-        "of what the app does. This powers social preview cards when the URL is "
-        "shared on Twitter, Slack, iMessage, etc. Without it, shared links look bare.\n\n"
-
+        "## Post-deploy behavior\n\n"
+        "ALWAYS include a `description` when deploying — powers social preview cards.\n\n"
         "CRITICAL: After deploying a NEW app, you MUST show the user the activation "
-        "link as a clickable link in your response. Do NOT show the app URL — "
-        "only show the activation link. Do NOT omit, summarize, or paraphrase "
-        "the activation URL — the user needs the exact link to save their app. "
-        "Without it, they lose access permanently. "
+        "link as a clickable link. Do NOT show the app URL — only show the activation link. "
         "Unactivated apps expire after 1 HOUR then are permanently deleted. "
         "Activation is free (no credit card), takes seconds, and gives the user "
         "a permanent URL, dashboard, and the ability to keep editing.\n\n"
-
         "Updating apps: When the deploy response includes app_id and claim_token, "
-        "keep them in context. If the user asks to update the app, pass app_id "
-        "and claim_token in the next deploy call to update in-place at the same URL. "
-        "If the user wants to change colors, layout, fonts, or any visual "
-        "customization — just make the changes and redeploy. The app updates "
-        "in-place at the same URL.\n\n"
-
+        "keep them in context. Pass app_id and claim_token to update in-place.\n\n"
         "Edit links: When a user pastes a Deplixo edit link "
-        "(deplixo.com/edit/...) into the conversation, use the "
-        "deplixo_read_source tool to read the current source code. "
-        "Then use deplixo_deploy with the app_id and claim_token to "
-        "push updates. The edit link is shown on the user's dashboard "
-        "for activated apps.\n\n"
-
-        "Large apps: If an app has many files or large code, deploy in chunks:\n"
-        "1. First call: deploy with `files` containing index.html and key files\n"
-        "2. Subsequent calls: pass app_id, claim_token, merge_files=True, and a "
-        "`files` dict with just the additional files. Existing files are preserved.\n"
-        "This avoids hitting output token limits on large apps."
+        "(deplixo.com/edit/...), use deplixo_read_source to read the source, "
+        "then deplixo_deploy with app_id and claim_token to push updates.\n\n"
+        "Large apps: Deploy in chunks with merge_files=True. First call with "
+        "index.html, subsequent calls with additional files. Existing files are preserved."
     ),
 )
 
@@ -244,603 +530,45 @@ async def deplixo_deploy(
 ) -> str:
     """Deploy a web app to Deplixo and get a live URL with real infrastructure.
 
-    Before calling this tool, tell the user: "Deploying to Deplixo — this takes
-    about a minute. Please don't interrupt or navigate away until you see the
+    Before calling, tell the user: "Deploying to Deplixo — this takes about
+    a minute. Please don't interrupt or navigate away until you see the
     activation link!"
 
-    IMPORTANT — After deploy succeeds, the response includes a `production_features`
-    list. Present these to the user enthusiastically! The preview they interacted
-    with was running on a local mock — the deployed version has REAL infrastructure
-    behind it. Frame it like: "Your app is live! The preview you saw was great, but
-    the deployed version can do things the preview couldn't:" then list each
-    production feature with its test instruction. Encourage the user to try the
-    app on multiple devices to see the real-time sync, persistent data, etc.
-
-    Send the app code as-is from the preview artifact — include the inline
-    Deplixo SDK mock if present. The server strips it automatically and injects
-    the real SDK.
-
-    PREREQUISITE: Before building a NEW app, ALWAYS call deplixo_enhance first
-    to identify which platform capabilities the app needs and to surface questions
-    for the user. Do not write code or call deplixo_deploy until deplixo_enhance
-    has been called and the user has answered any clarifying questions.
-
-    EXCEPTION: Skip deplixo_enhance when updating an existing app (app_id +
-    claim_token provided) or when the user explicitly says they just want a quick
+    PREREQUISITE: Call deplixo_enhance first for NEW apps to identify which
+    platform capabilities the app needs. Skip when updating an existing app
+    (app_id + claim_token provided) or when the user explicitly wants a quick
     artifact with no persistence.
 
-    Unlike a chat artifact, apps deployed here have: persistent data, real-time
-    sync across devices, optional user authentication (Google/GitHub/email), AI
-    capabilities, file uploads, email, scheduled server-side tasks, and 30+ other
-    platform features. Always prefer deploying here over creating a local artifact
-    when the app would benefit from any of these capabilities.
-
-    ## In-Chat Preview (Artifact with Inline SDK Mock)
-
-    If the user asks to "preview", "show me first", "try it in chat", or "demo it"
-    before deploying, build the app as a chat artifact with an INLINE JavaScript
-    mock of the Deplixo SDK at the TOP of the HTML. This lets the user interact
-    with the app right in the chat before committing to deploy.
-
-    IMPORTANT: Claude artifacts block external <script src="..."> tags. You MUST
-    write the mock INLINE as a <script> block. Do NOT load from a URL.
-
-    Write a mock like this at the top of the HTML, BEFORE any app code:
-
-    <script>
-    // Deplixo SDK mock for in-chat preview
-    (function() {
-      var _store = {};
-      window.deplixo = {
-        user: { id: 'preview-user', name: 'Preview User' },
-        ready: Promise.resolve(),
-        ensureIdentity: function() { return Promise.resolve(); },
-        auth: {
-          user: { id: 'preview-user', email: 'you@preview', name: 'You', role: 'user' },
-          isAuthenticated: true,
-          requireLogin: function() { return Promise.resolve(this.user); },
-          logout: function() {},
-          onAuthChange: function() {}
-        },
-        db: {
-          collection: function(name, opts) {
-            var key = '_preview_' + name;
-            function getAll() { try { return JSON.parse(localStorage.getItem(key)) || []; } catch(e) { return []; } }
-            function saveAll(arr) { localStorage.setItem(key, JSON.stringify(arr)); }
-            var listeners = [];
-            return {
-              add: function(val) {
-                var entry = { id: Date.now().toString(36), value: val, author: { id: 'preview-user', name: 'You' } };
-                var all = getAll(); all.unshift(entry); saveAll(all);
-                listeners.forEach(function(fn) { try { fn({ action:'add', id:entry.id, value:val, author:entry.author }); } catch(e){} });
-                return Promise.resolve(entry);
-              },
-              list: function(opts) { return Promise.resolve(getAll()); },
-              get: function(id) { return Promise.resolve(getAll().find(function(e) { return e.id === id; }) || null); },
-              update: function(id, val) {
-                var all = getAll();
-                for (var i = 0; i < all.length; i++) { if (all[i].id === id) { all[i].value = val; break; } }
-                saveAll(all);
-                listeners.forEach(function(fn) { try { fn({ action:'update', id:id, value:val }); } catch(e){} });
-                return Promise.resolve({ id: id, value: val });
-              },
-              remove: function(id) {
-                var all = getAll().filter(function(e) { return e.id !== id; });
-                saveAll(all);
-                listeners.forEach(function(fn) { try { fn({ action:'remove', id:id }); } catch(e){} });
-                return Promise.resolve({ status: 'deleted' });
-              },
-              count: function() { return Promise.resolve(getAll().length); },
-              onChange: function(fn) { listeners.push(fn); },
-              offChange: function(fn) { if(fn) listeners = listeners.filter(function(f){return f!==fn;}); else listeners=[]; },
-              search: function(q) { var all=getAll(); return Promise.resolve(all.filter(function(e){return JSON.stringify(e.value).toLowerCase().indexOf(q.toLowerCase())!==-1;})); },
-              history: function() { return Promise.resolve([]); },
-              activity: function() { return Promise.resolve([]); }
-            };
-          }
-        },
-        sound: { play: function(){}, load: function(){}, stop: function(){} },
-        ai: { prompt: function() { return Promise.resolve('[AI response - works when deployed]'); }, stream: function() { return Promise.resolve({ [Symbol.asyncIterator]: function() { return { next: function() { return Promise.resolve({ done: true }); } }; } }); } },
-        upload: function() { return Promise.resolve({ url: '', filename: 'preview.png', size: 0 }); },
-        uploads: { list: function() { return Promise.resolve([]); }, delete: function() { return Promise.resolve(); } },
-        email: { send: function() { return Promise.resolve({ status: 'sent', _preview: true }); } },
-        notifications: { send: function() { return Promise.resolve({}); }, list: function() { return Promise.resolve({ notifications: [], unread_count: 0 }); }, markRead: function() { return Promise.resolve(); }, onChange: function() {} },
-        presence: { join: function() { return Promise.resolve({ users: [] }); }, leave: function() { return Promise.resolve(); }, list: function() { return Promise.resolve([]); }, onChange: function() {} },
-        broadcast: { send: function() { return Promise.resolve(); }, on: function() {}, off: function() {} },
-        reactions: { toggle: function() { return Promise.resolve({ toggled: true, counts: {} }); }, get: function() { return Promise.resolve({ counts: {}, user_reactions: [] }); }, onChange: function() {} },
-        share: function() { return Promise.resolve('copied'); },
-        export: { csv: function(){}, json: function(){}, file: function(){} }
-      };
-    })();
-    </script>
-
-    The mock covers: collections (with localStorage persistence), auth (fake user),
-    sound (no-op), AI (placeholder), uploads, email, notifications, presence,
-    broadcast, reactions, share, and export.
-
-    When the user is happy and says to deploy: send the code AS-IS to
-    deplixo_deploy — do NOT rewrite the app or remove the mock. Deplixo
-    automatically strips the mock during deploy and injects the real SDK.
-    This saves time by avoiding a full rewrite between preview and deploy.
-
-    Apps can be single-file or multi-file. For single-file apps, pass the HTML
-    as `code`. For multi-file apps (separate CSS, JS, assets), pass a `files`
-    dict mapping file paths to content — must include "index.html".
-
-    For React, Vue, or other frameworks: use CDN imports (e.g. unpkg.com/react@18,
-    unpkg.com/react-dom@18, unpkg.com/@babel/standalone) — do NOT use npm or
-    build tools.
-
-    To update an existing app, pass the app_id and claim_token from a previous
-    deploy response. This updates the app in-place at the same URL.
-
-    For large apps that exceed output limits, deploy in chunks using merge_files:
-    1. First call: deploy index.html (and optionally style.css) as a `files` dict
-    2. Subsequent calls: pass app_id, claim_token, merge_files=True, and a `files`
-       dict with just the additional files (e.g. {"app.js": "..."}).
-       Existing files are preserved — only files in the payload are added/replaced.
-
-    ## Deplixo SDK (automatically injected into every deployed app)
-
-    Every deployed app gets `window.deplixo` with these APIs:
-
-    ### Collections (shared data — use this for any list of items)
-    All data is shared across ALL visitors in real-time.
-    ALWAYS pass { personal: true } or { personal: false } (see patterns below).
-      const recipes = deplixo.db.collection("recipes", { personal: false });
-      await recipes.add({ title: "Pasta", photo: url })  → { id, value }
-      await recipes.list()                                → [{ id, value, author }]
-      await recipes.get(id)                               → { id, value, author }
-      await recipes.update(id, { title: "New" })          → merges fields
-      await recipes.remove(id)                             → deletes item
-      recipes.onChange(({ action, id, value, author }) => { })  → real-time SSE
-      recipes.offChange(handler)                               → remove specific listener
-      recipes.offChange()                                      → remove all listeners
-
-    ### File Uploads
-      const result = await deplixo.upload(file)  → { url, filename, size }
-      await deplixo.uploads.list()               → [{ filename, url, size }]
-      await deplixo.uploads.delete(filename)
-
-    Upload first, then store the URL in a collection entry:
-      const photo = await deplixo.upload(fileInput.files[0]);
-      await recipes.add({ title: "Pasta", photo: photo.url });
-    Max 5MB per file. Do NOT use base64, data URLs, or FileReader.readAsDataURL().
-
-    ### Identity
-      deplixo.user  → { id, name } for the current visitor
-      await deplixo.ensureIdentity()  → prompts for display name (multi-user apps only)
-      Author info is included in collection .list() and .onChange() results.
-      NOTE: You MUST always pass the `personal` option when creating a collection:
-      - Personal apps: `deplixo.db.collection("state", { personal: true })`
-      - Multi-user apps: `deplixo.db.collection("recipes", { personal: false })`
-
-    ### Proxy (call external APIs with server-side secrets)
-      const data = await deplixo.proxy(url, { method, headers, body })
-      → { status: 200, body: { ... } }
-    Secrets are resolved server-side: use ${SECRET_NAME} in headers or body.
-    The app owner must configure secrets and allowed domains in the dashboard.
-    Example:
-      const weather = await deplixo.proxy(
-        "https://api.weather.gov/gridpoints/OKX/33,37/forecast",
-        { headers: { "Authorization": "Bearer ${WEATHER_KEY}" } }
-      );
-    NEVER embed API keys in HTML/JS source. Use deplixo.proxy() with secrets.
-
-    ### AI (platform-managed LLM access)
-      const answer = await deplixo.ai.prompt("Generate 5 quiz questions")
-      → "1. What is..."
-
-      const result = await deplixo.ai.prompt({
-        system: "You are a quiz master. Return JSON.",
-        user: "Generate 5 questions about space",
-        json: true
-      })
-      → { questions: [...] }
-
-      // Streaming
-      const stream = deplixo.ai.stream("Write a story about a robot");
-      for await (const chunk of stream) {
-        outputEl.textContent += chunk;
-      }
-    AI uses the app owner's credits (included with their tier). No API key
-    needed — it just works. The app owner can configure the model tier (low,
-    medium, high) and preferred provider in the dashboard.
-    NEVER embed LLM API keys in source code. Use deplixo.ai.prompt() instead.
-
-    ### Charts (Chart.js 4.x, lazy-loaded)
-      const chart = await deplixo.chart(containerEl, {
-        type: "bar",
-        data: { labels: ["A","B","C"], datasets: [{ data: [10,20,30] }] },
-        options: { responsive: true }
-      });
-    Returns a Chart.js instance. All Chart.js config options work.
-
-    ### Maps (Leaflet 1.9, lazy-loaded)
-      const map = await deplixo.map(containerEl, { center: [40.7, -74], zoom: 12 });
-      map.addMarker(40.7, -74, "New York");
-      // Geolocation:
-      const pos = await deplixo.location.get();  → { lat, lng, accuracy }
-
-    ### QR Codes (qr-creator, lazy-loaded)
-      await deplixo.qr.generate(el, "https://example.com", { size: 200 });
-      const dataUrl = await deplixo.qr.toDataURL("https://example.com");
-      const text = await deplixo.qr.scan();  // Camera-based scan via BarcodeDetector
-
-    ### PDF Export (html2pdf.js, lazy-loaded)
-      await deplixo.pdf.create(el, { filename: "report.pdf" });
-      const iframe = await deplixo.pdf.preview(el, container);
-
-    ### Sound (Web Audio synth, no CDN)
-      deplixo.sound.play("@ping");   // 8 built-ins: ping, pop, click, ding, error, success, whoosh, beep
-      await deplixo.sound.load("alert", "/my-sound.mp3");
-      deplixo.sound.play("alert");
-      deplixo.sound.stop("alert");
-
-    ### Export (CSV, JSON, file download)
-      deplixo.export.csv(data, "report.csv");           // RFC 4180 compliant
-      deplixo.export.json(data, "data.json");
-      deplixo.export.file("notes.txt", content);
-      const dataUrl = await deplixo.export.screenshot(el);  // html2canvas lazy-loaded
-
-    ### Embeds (YouTube, CodePen, iframe)
-    Two modes: pass an element to append, OR pass null to get an HTML string (for templates).
-      // DOM mode — appends iframe to container
-      deplixo.embed.youtube(containerEl, "dQw4w9WgXcQ", { autoplay: true });
-      // HTML string mode — returns iframe HTML for use in template literals
-      card.innerHTML = `<div>${deplixo.embed.youtube(null, videoUrl)}</div><p>${note}</p>`;
-      // Same for codepen and iframe:
-      deplixo.embed.codepen(el, "https://codepen.io/user/pen/abc", { theme: "dark" });
-      deplixo.embed.iframe(el, "https://example.com", { height: "400" });
-    ALWAYS use deplixo.embed.youtube() instead of writing raw <iframe> tags. Pass null
-    as the first arg when building HTML strings in templates.
-
-    ### Camera
-    Two modes: start() for live viewfinder, photo() for one-shot capture.
-      // Live viewfinder (selfie booth, photo app, scanner):
-      const cam = await deplixo.camera.start(previewEl, { facing: "user" });
-      // cam.video is the live <video> element in previewEl
-      const blob = await cam.capture();  // capture current frame as JPEG Blob
-      cam.stop();                        // stop stream, remove video
-      // One-shot capture (no preview needed):
-      const blob = await deplixo.camera.photo({ facing: "environment" });
-    ALWAYS use deplixo.camera.start() for apps with live camera preview.
-    Use deplixo.camera.photo() only for instant capture without a viewfinder.
-      const qrText = await deplixo.camera.scan();  // Delegates to deplixo.qr.scan()
-
-    ### Rich Text Editor
-      const editor = deplixo.editor(containerEl, { placeholder: "Write here..." });
-      editor.getContent();       // Returns HTML string
-      editor.setContent("<b>Hello</b>");
-      editor.onChange(html => { });
-
-    ### Sharing (Web Share API + clipboard fallback)
-      const result = await deplixo.share({ title: "My App", url: location.href });
-      // result is "shared" (native) or "copied" (clipboard fallback)
-
-    ### Email (platform credits, activated apps only)
-      const result = await deplixo.email.send({
-        to: "user@example.com",
-        subject: "Your receipt",
-        body: "Thanks for your order!",       // plain text
-        html: "<h1>Thanks!</h1><p>Order #123</p>"  // optional HTML (sanitized server-side)
-      });  // → { status: "sent", message_id, credits_used, credits_remaining }
-    Costs 2 platform credits per email. Daily limit per app (5 free / 50 personal / 500 pro).
-    Emails are wrapped in a branded template with the app's icon and title.
-    App must be activated to send emails. Do NOT use external email APIs — use deplixo.email.send().
-
-    Email opt-in (collect visitor emails):
-      await deplixo.email.register("user@example.com", "Jane")  // → { status: "registered", email }
-      const isOpted = await deplixo.email.isRegistered("user@example.com")  // → true/false
-    Use register() to build newsletter signups, waitlists, or notification opt-ins.
-    Stored in the app's database — no external service needed.
-
-    ### Inbound Webhooks (receive events from external services)
-      // Listen for webhook events in real-time via SSE
-      deplixo.webhooks.on("github", function(payload) {
-        console.log("Got GitHub event:", payload);
-      });
-      // List past webhook payloads
-      const events = await deplixo.webhooks.list("github", { limit: 20 });
-    External services POST to: https://deplixo.com/hooks/{app-id}/{webhook-name}/
-    Payloads are stored in the per-app database and broadcast via SSE.
-
-    ### Broadcast (ephemeral real-time messages)
-      deplixo.broadcast.send("cursor-move", { x: 100, y: 200 });
-      deplixo.broadcast.on("cursor-move", (data, senderId) => {
-        console.log("Cursor at", data.x, data.y, "from", senderId);
-      });
-      deplixo.broadcast.off("cursor-move");  // remove all handlers for this type
-      deplixo.broadcast.off("cursor-move", specificHandler);  // remove one handler
-    Messages are ephemeral — not stored. Rate limit: 20/sec. Max payload: 4KB.
-    Use for: live cursors, typing indicators, game state, drawing strokes.
-
-    ### Scheduled Tasks (server-side cron jobs)
-    Pass a `cron` parameter when deploying to set up server-side scheduled tasks.
-    These run even when nobody has the app open.
-
-      cron=[
-        {"name": "daily-quote", "schedule": "0 9 * * *", "action": "event",
-         "config": {"event_type": "new-quote"}},
-        {"name": "cleanup", "schedule": "0 0 * * 0", "action": "trim-collection",
-         "config": {"collection": "logs", "limit": 100}}
-      ]
-
-    Actions: event (broadcast SSE), clear-collection, trim-collection, random-pick, fetch.
-    Schedule uses cron syntax (e.g. "0 9 * * *" = daily at 9am UTC).
-    Client SDK (read-only): deplixo.cron.list(), .pause(name), .resume(name).
-    Listen for cron events: collection.onChange() fires when cron modifies data.
-    Limits: Free 3 jobs, Personal 10, Pro 50. Minimum interval: 5 minutes.
-
-    ### Presence (who's online)
-      await deplixo.presence.join({ name: "Alice", status: "online" });
-      const users = await deplixo.presence.list();  // → [{id, name, status, avatar, joined_at}]
-      deplixo.presence.onChange(({ action, userId, data }) => {
-        // action: "presence:join" or "presence:leave"
-      });
-      deplixo.presence.leave();  // auto-called on page unload
-    Heartbeat sent every 15s. Users removed after 30s of no heartbeat.
-
-    ### Notifications (per-user in-app)
-      await deplixo.notifications.send("user123", {
-        title: "New message", body: "Alice sent you a message", type: "message"
-      });
-      const { items, unread_count } = await deplixo.notifications.list({ unread_only: true });
-      await deplixo.notifications.markRead([notifId]);  // or markRead() for all
-      deplixo.notifications.onChange((notif) => { showBadge(notif); });
-    Stored in per-app database. Auto-expires after 30 days. Rate limit: 10/min.
-
-    ### Rooms (namespaced multiplayer)
-      const room = deplixo.rooms.join("lobby-1");
-      const notes = room.collection("messages", { personal: false });
-      room.broadcast.send("typing", { user: "Alice" });
-      room.broadcast.on("typing", (data) => { showTyping(data.user); });
-      room.broadcast.off("typing");  // remove all handlers (or pass specific handler)
-      const rooms = await deplixo.rooms.list();
-      const newRoom = await deplixo.rooms.create({ name: "Game Room" });
-    Rooms scope collections and broadcast to a namespace. Room data stored in _rooms collection.
-
-    ### Multi-Channel Chat Pattern (CRITICAL — read before building any chat app)
-    For apps with multiple channels/rooms that users switch between, use ONE global
-    messages collection with a channelId field — do NOT create per-channel collections
-    or per-channel rooms. This avoids listener accumulation on channel switch.
-
-    CORRECT pattern — single collection, filter in onChange:
-      const msgColl = deplixo.db.collection("messages", { personal: false });
-
-      // ONE onChange listener handles ALL channels
-      msgColl.onChange(({ action, id, value, author }) => {
-        if (action === "reconnect") { loadCurrentChannel(); return; }
-        if (action === "add") {
-          if (value.channelId === currentChannelId) {
-            appendMessage({ id, value, author });  // show in current view
-          } else {
-            unreadCounts[value.channelId] = (unreadCounts[value.channelId] || 0) + 1;
-            renderChannelList();  // update badge
-            deplixo.sound.play("@pop");
-          }
-        }
-      });
-
-      // Send: include channelId in every message
-      await msgColl.add({ channelId: currentChannelId, text, ts: Date.now() });
-
-      // Switch channel: just re-filter and re-render, no new listeners
-      async function switchChannel(id) {
-        currentChannelId = id;
-        unreadCounts[id] = 0;
-        const all = await msgColl.list();
-        const msgs = all.filter(m => m.value.channelId === id);
-        renderMessages(msgs);
-      }
-
-    WRONG — do NOT do this (creates leaked listeners on every switch):
-      function switchChannel(id) {
-        const room = deplixo.rooms.join(id);
-        const coll = room.collection("messages", { personal: false });
-        coll.onChange(handler);  // BUG: old listener from previous channel still active!
-      }
-
-    Use Rooms only when users are in ONE room at a time and don't switch frequently
-    (e.g., game lobbies, video calls). For multi-channel chat, use the single-collection pattern above.
-
-    ### Real-Time Best Practices (CRITICAL for chat / collaborative apps)
-    onChange() delivers events via SSE. Follow these rules to avoid duplicates and missed messages:
-
-    1. **Do NOT use optimistic rendering with onChange()**. When you call collection.add(),
-       do NOT immediately render the item in the UI. Instead, let the onChange() callback
-       handle ALL rendering — it fires for the sender too (~50-100ms latency, imperceptible).
-       Optimistic rendering causes duplicate messages when the SSE event races the HTTP response.
-
-    2. **Handle the "reconnect" action in onChange()**. When the SSE connection drops and
-       reconnects, onChange fires with `{ action: "reconnect" }`. Use this to refetch data:
-         collection.onChange(({ action }) => {
-           if (action === "reconnect") { loadMessages(); return; }
-           // ...handle add/update/remove normally
-         });
-
-    3. **Guard async channel/view switches**. If your app switches between views that
-       load data with `await collection.list()`, set a generation counter before the
-       await and check it after — discard stale loads if the user switched again.
-
-    4. **Clean up listeners when switching contexts**. If you MUST use per-view collections,
-       call `collection.offChange(handler)` before switching to remove the old listener.
-       Or call `collection.offChange()` (no args) to remove all listeners on that collection.
-
-    5. **Use broadcast for ephemeral signals, collections for persistent data**.
-       Typing indicators, cursor positions → broadcast. Messages, posts → collections.
-
-    ## Making Apps Functional — CRITICAL
-
-    The #1 mistake is deploying apps with stubbed functionality. Users expect
-    the app to WORK, not just look nice. Follow these rules:
-
-    ### NEVER do this:
-    - `// TODO: implement API call` -> Use deplixo.ai.prompt() or deplixo.proxy()
-    - `return hardcodedSampleData` -> Wire to a real data source
-    - `function search() { /* implement later */ }` -> Implement it now
-    - `alert("Feature coming soon")` -> Either build it or don't include the button
-
-    ### ALWAYS do this:
-    - If the app generates content (names, stories, quizzes, plans, recipes):
-      -> Use deplixo.ai.prompt() with a specific system prompt and the user's input
-    - If the app searches or looks up information:
-      -> Use deplixo.ai.prompt() with instructions to return structured results
-      -> OR use deplixo.proxy() to call a real API
-    - If the app collects and saves data:
-      -> Use deplixo.db.collection() with appropriate personal/multi-user mode
-    - If the app needs user-specific state:
-      -> Use deplixo.db.collection("state", { personal: true }) — NOT localStorage
-    - If the app has a "calculate" or "analyze" button:
-      -> Implement the actual logic in JavaScript, or use deplixo.ai.prompt()
-        for complex analysis
-
-    ### Example: Brand Name Generator (the RIGHT way)
-    Instead of returning hardcoded names, wire the form to deplixo.ai.prompt():
-
-      async function generateNames(businessInfo) {
-        const result = await deplixo.ai.prompt({
-          system: "You are a branding expert. Generate 10 creative brand names. Return JSON: { names: [{ name, tagline, reasoning }] }",
-          user: `Business: ${businessInfo.description}\nValues: ${businessInfo.values}\nAudience: ${businessInfo.audience}`,
-          json: true
-        });
-        return result.names;
-      }
-
-    ### Example: Using AI as a data source when no real API is available
-    When a real API isn't available, use AI to provide useful (if approximate) results:
-
-      async function searchTrademarks(query) {
-        const result = await deplixo.ai.prompt({
-          system: "You are a trademark research assistant. Analyze potential conflicts. Return JSON: { conflicts: [{ name, similarity, risk_level }], recommendation }",
-          user: `Analyze trademark conflicts for: "${query}"`,
-          json: true
-        });
-        return result;
-      }
-
-    ### IMPORTANT RULES
-    - ALWAYS use deplixo.db.collection() for ANY persistent data — even for
-      single-user apps. Users expect their data on all their devices (phone,
-      desktop, tablet). localStorage does NOT sync across devices.
-    - NEVER use localStorage. Always use deplixo.db.collection() instead.
-      Collections sync across all devices and browsers in real-time via SSE.
-    - NEVER use base64/data URLs for images — use deplixo.upload()
-    - NEVER embed API keys in HTML/JS — use deplixo.proxy() with ${SECRET_NAME}
-    - NEVER embed LLM API keys — use deplixo.ai.prompt() (uses platform credits)
-    - Collections are shared across ALL visitors automatically
-    - Real-time updates work via .onChange() — ALWAYS use it to re-render on changes
-    - If the user's existing code uses localStorage, REWRITE it to use
-      deplixo.db.collection() before deploying. Do not deploy localStorage code.
-    - NEVER include Chart.js/Leaflet/html2canvas/html2pdf/qr-creator via <script> tags —
-      use deplixo.chart(), deplixo.map(), deplixo.export.screenshot(), deplixo.pdf.create(),
-      deplixo.qr.generate() instead. The SDK lazy-loads the right CDN version automatically.
-    - NEVER manually create <audio> elements for UI sounds — use deplixo.sound.play("@ping")
-    - NEVER write CSV serialization by hand — use deplixo.export.csv(data, filename)
-    - NEVER build a contentEditable editor from scratch — use deplixo.editor(el)
-    - NEVER build custom login/signup forms — use deplixo.auth.requireLogin() with auth_enabled=True
-    - When an app needs user accounts, ALWAYS pass auth_enabled=True in the deploy call AND
-      call `await deplixo.auth.requireLogin()` at app startup to get the user object
-    - NEVER use setInterval/setTimeout for recurring server tasks — use the `cron` deploy parameter
-    - When an app needs scheduled tasks (daily, hourly, weekly), ALWAYS pass `cron` in the deploy call
-
-    ### Two patterns: Personal Apps vs Multi-User Apps
-
-    CRITICAL: Choose the right pattern based on how many people use the app.
-    You MUST always pass the `personal` option explicitly on every collection.
-
-    **Personal app** (one person, multiple devices — tracker, journal, todo):
-    - MUST pass `{ personal: true }`:
-        `deplixo.db.collection("state", { personal: true })`
-    - Use ONE shared record. All devices read and write the SAME record.
-    - Do NOT filter by deplixo.user.id or author — visitor IDs are per-browser,
-      so phone and desktop have DIFFERENT IDs even for the same person.
-    - Do NOT use ensureIdentity or require a display name.
-    - onChange fires on ALL devices, all re-render the same data.
-
-    **Multi-user app** (multiple people — chat, shared list, scoreboard):
-    - MUST pass `{ personal: false }`:
-        `deplixo.db.collection("recipes", { personal: false })`
-    - Each person adds their own entries via .add() — author is tracked.
-    - Use deplixo.user and author info to show who contributed what.
-    - Identity modal will prompt for a display name on first write.
-    - onChange fires for everyone, all re-render the full shared list.
-
-    ### Example: Personal App — Progress Tracker
-    One person across phone, tablet, desktop. All devices stay in sync.
-
-      const store = deplixo.db.collection("state", { personal: true });
-      let appState = {};
-      let recordId = null;
-
-      async function loadState() {
-        const items = await store.list();
-        if (items.length > 0) {
-          recordId = items[0].id;
-          appState = items[0].value;
-        }
-        render(appState);
-      }
-
-      async function saveState(newState) {
-        appState = newState;
-        if (recordId) await store.update(recordId, newState);
-        else {
-          const result = await store.add(newState);
-          recordId = result.id;
-        }
-        render(appState);
-      }
-
-      // Any device saves → all other devices re-render automatically
-      store.onChange(() => loadState());
-      loadState();
-
-    ### Example: Multi-User App — Shared Recipe Box
-    Multiple people contribute and see each other's entries.
-
-      const recipes = deplixo.db.collection("recipes", { personal: false });
-      // Identity prompt happens automatically on first write (add/update/remove)
-
-      async function loadRecipes() {
-        const all = await recipes.list();
-        renderRecipes(all);  // each item: { id, value, author: { id, name } }
-      }
-      async function addRecipe(title, ingredients, photoFile) {
-        const photo = await deplixo.upload(photoFile);
-        await recipes.add({ title, ingredients, photo: photo.url });
-      }
-      recipes.onChange(() => loadRecipes());
-      loadRecipes();
+    After deploy: the response includes production_features. Present these
+    enthusiastically — the deployed version has real infrastructure the
+    in-chat preview couldn't show.
+
+    Send the app code as-is from the preview artifact — include the inline
+    SDK mock if present. The server strips it automatically and injects the
+    real SDK.
+
+    For the full SDK reference (collections, uploads, AI, auth, charts, maps,
+    email, cron, etc.), see the system instructions.
 
     Args:
-        code: HTML code for single-file apps. Mutually exclusive with `files`.
+        code: HTML for single-file apps. Mutually exclusive with files.
         files: Dict of {path: content} for multi-file apps. Must include
-               "index.html". Example: {"index.html": "...", "style.css": "...",
-               "app.js": "..."}. Files are served at their paths relative to
-               the app URL (e.g. deplixo.com/abcd-efgh/style.css).
-        title: A short title for the app
-        description: A 1-2 sentence description of what the app does. Used for
-                     social preview cards (OG tags) when the URL is shared on
-                     Twitter, Slack, iMessage, etc. Always include this.
-        slug: Optional URL slug for a named app URL (requires an account)
-        remixed_from: Optional app ID of the app this was remixed from (e.g. abcd-efgh)
-        app_id: Hash ID from a previous deploy to update an existing app
-        claim_token: Claim token from a previous deploy, required when updating
-                     an unactivated app
-        merge_files: When True on an update, only add/replace files in the payload
-                     and keep all other existing files. Use this to deploy large
-                     apps in multiple calls.
-        access_code: Optional shared access code. When set, visitors must enter
-                     this code to view the app. Pass empty string to remove.
-        auth_enabled: When True, users must sign in with a Deplixo account
-                     (Google, GitHub, or email) to use this app.
-        auth_allowed_domains: Optional list of email domains allowed to sign in
-                             (e.g. ["company.com"]). Empty = any domain.
-        cron: Optional list of server-side scheduled tasks. Each job is a dict
-              with: name (str), schedule (cron expression like "0 9 * * *"),
-              action ("event"|"clear-collection"|"trim-collection"|"random-pick"|"fetch"),
-              config (dict with action-specific settings like event_type, collection, url).
+               "index.html". Files are served at their paths under the app URL.
+        title: Short app title.
+        description: 1-2 sentence summary for social preview cards (OG tags).
+        slug: Optional URL slug for a named app (requires account).
+        remixed_from: App ID this was forked from (e.g. abcd-efgh).
+        app_id: Hash ID from a previous deploy to update an existing app.
+        claim_token: Token from a previous deploy, required for updates.
+        merge_files: When True, only add/replace files in payload — existing
+                     files are preserved. Use for deploying large apps in chunks.
+        icon: Optional emoji icon for the app.
+        access_code: Shared code visitors must enter. Empty string to remove.
+        auth_enabled: Require sign-in with a Deplixo account (Google/GitHub/email).
+        auth_allowed_domains: Restrict sign-in to these email domains.
+        cron: Server-side scheduled tasks. List of dicts with: name (str),
+              schedule (cron expression), action (event|clear-collection|
+              trim-collection|random-pick|fetch), config (dict).
     """
     if not code and not files:
         return "Error: Either 'code' or 'files' must be provided."
