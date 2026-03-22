@@ -229,6 +229,16 @@ mcp = FastMCP(
         "- App needs chat rooms / lobbies -> use deplixo.rooms.join/create/list (room-scoped collections + broadcast)\n"
         "- NEVER build custom login forms — Deplixo handles auth via hosted login pages (Google/GitHub/email)\n\n"
 
+        "### Image handling\n"
+        "When a user wants to use their own images (uploaded to the conversation) in an app:\n"
+        "1. Call `deplixo_upload_image` to create an upload session\n"
+        "2. Share the upload URL with the user and ask them to upload their image(s)\n"
+        "3. After the user confirms they've uploaded, call `deplixo_check_upload` to get CDN URLs\n"
+        "4. Use the CDN URLs directly in the app code (e.g., <img src=\"https://cdn...\">)\n\n"
+        "NEVER try to embed base64 image data in the code or files dict.\n"
+        "NEVER ask users to upload images to external services.\n"
+        "If the user provides a web URL for an image, you can use it directly — no upload session needed.\n\n"
+
         "### NEVER do this\n"
         "- `// TODO: implement API call` -> Use deplixo.ai.prompt() or deplixo.proxy()\n"
         "- `return hardcodedSampleData` -> Wire to a real data source\n"
@@ -528,6 +538,7 @@ async def deplixo_deploy(
     auth_enabled: bool = False,
     auth_allowed_domains: list[str] | None = None,
     cron: list[dict] | None = None,
+    assets: list[dict] | None = None,
 ) -> str:
     """Deploy a web app to Deplixo and get a live URL with real infrastructure.
 
@@ -570,6 +581,11 @@ async def deplixo_deploy(
         cron: Server-side scheduled tasks. List of dicts with: name (str),
               schedule (cron expression), action (event|clear-collection|
               trim-collection|random-pick|fetch), config (dict).
+        assets: External image URLs to download and host on CDN. List of dicts
+                with: url (source URL), path (target path like "images/hero.jpg").
+                Deplixo downloads the image, hosts it permanently, and rewrites
+                the URL in the code. Use this when the user provides a web URL
+                for an image (not a local file).
     """
     if not code and not files:
         return "Error: Either 'code' or 'files' must be provided."
@@ -604,6 +620,8 @@ async def deplixo_deploy(
         payload["auth_allowed_domains"] = auth_allowed_domains
     if cron:
         payload["cron"] = cron
+    if assets:
+        payload["assets"] = assets
 
     timeout = httpx.Timeout(connect=10.0, read=180.0, write=30.0, pool=10.0)
     try:
@@ -629,6 +647,7 @@ async def deplixo_deploy(
 
         suggestions = data.get("suggestions")
         prod_features = data.get("production_features", [])
+        asset_warnings = data.get("asset_warnings", [])
 
         if updated:
             # App was updated in-place (same URL)
@@ -657,6 +676,8 @@ async def deplixo_deploy(
                 parts.extend(_format_suggestions(suggestions))
             if prod_features:
                 parts.extend(_format_production_features(prod_features))
+            if asset_warnings:
+                parts.extend(["", "Asset warnings:"] + [f"  - {w}" for w in asset_warnings])
             return "\n".join(parts)
 
         # --- First deploy of this app ---
@@ -694,6 +715,8 @@ async def deplixo_deploy(
                 parts.extend(_format_suggestions(suggestions))
             if prod_features:
                 parts.extend(_format_production_features(prod_features))
+            if asset_warnings:
+                parts.extend(["", "Asset warnings:"] + [f"  - {w}" for w in asset_warnings])
             return "\n".join(parts)
         else:
             # App was deployed by an authenticated user (already activated)
@@ -710,6 +733,8 @@ async def deplixo_deploy(
                 parts.extend(_format_suggestions(suggestions))
             if prod_features:
                 parts.extend(_format_production_features(prod_features))
+            if asset_warnings:
+                parts.extend(["", "Asset warnings:"] + [f"  - {w}" for w in asset_warnings])
             return "\n".join(parts)
     else:
         error_text = response.text[:5000] if len(response.text) > 5000 else response.text
@@ -1096,6 +1121,117 @@ async def deplixo_query(
         return "\n".join(parts)
     except Exception as e:
         return f"Query failed: {str(e)[:300]}"
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+        idempotentHint=False,
+    )
+)
+async def deplixo_upload_image(
+    description: str = "",
+    max_files: int = 1,
+) -> str:
+    """Create an upload session for the user to upload images before deploying.
+    Returns a URL where the user can drag-and-drop their images.
+    After the user uploads, call deplixo_check_upload to get the CDN URLs.
+
+    Use this when the user provides a local image (uploaded to the conversation)
+    that they want included in their app. Do NOT try to embed base64 image data
+    in the code or files dict — it won't work.
+
+    If the user provides a web URL for an image, you can use it directly in the
+    app code — no upload session needed.
+
+    Args:
+        description: What the image is for (e.g. "hero image for pet profile page")
+        max_files: Maximum number of files the user can upload (default 1, max 10)
+    """
+    payload = {
+        "description": description,
+        "max_files": max(1, min(max_files, 10)),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(f"{DEPLIXO_API_URL}/api/v1/upload-session", json=payload)
+
+        if resp.status_code != 200:
+            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            return f"Failed to create upload session: {data.get('error', resp.text[:500])}"
+
+        data = resp.json()
+        return (
+            f"Upload session created!\n\n"
+            f"**Ask the user to upload their image(s) here:**\n"
+            f"{data['upload_url']}\n\n"
+            f"Session ID: {data['session_id']}\n"
+            f"Expires: {data['expires_at']}\n"
+            f"Max files: {data['max_files']}\n"
+            f"Max file size: {data['max_file_size_bytes'] // (1024 * 1024)}MB per file\n\n"
+            f"After the user confirms they've uploaded, call deplixo_check_upload "
+            f"with session_id='{data['session_id']}' to get the CDN URLs."
+        )
+    except Exception as e:
+        return f"Failed to create upload session: {str(e)[:300]}"
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+        idempotentHint=True,
+    )
+)
+async def deplixo_check_upload(
+    session_id: str,
+) -> str:
+    """Check if the user has completed uploading images for a given session.
+    Returns the CDN URLs of uploaded files, or status if still pending.
+
+    Call this after you've shared the upload URL with the user and they
+    confirm they've uploaded their image(s).
+
+    Args:
+        session_id: The session ID returned by deplixo_upload_image
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{DEPLIXO_API_URL}/api/v1/upload-session/{session_id}")
+
+        if resp.status_code == 404:
+            return "Upload session not found. It may have been cleaned up. Create a new one with deplixo_upload_image."
+
+        data = resp.json()
+
+        if data["status"] == "pending":
+            return (
+                "The user hasn't uploaded yet. "
+                "Remind them to upload at the URL you shared, then try again."
+            )
+        elif data["status"] == "expired":
+            return (
+                "This upload session has expired. "
+                "Create a new one with deplixo_upload_image."
+            )
+        else:  # completed
+            files = data["files"]
+            file_list = "\n".join(
+                f"- {f['url']} ({f['filename']}, {f['size_bytes']} bytes"
+                f"{f', {0}x{1}'.format(f['width'], f['height']) if f.get('width') else ''})"
+                for f in files
+            )
+            return (
+                f"Upload complete! {len(files)} file(s) ready:\n\n"
+                f"{file_list}\n\n"
+                f"Use these URLs directly in your app code (e.g., <img src=\"...\">). "
+                f"They are permanent CDN-hosted URLs."
+            )
+    except Exception as e:
+        return f"Failed to check upload: {str(e)[:300]}"
 
 
 def main():
