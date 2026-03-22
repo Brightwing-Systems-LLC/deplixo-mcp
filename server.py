@@ -13,15 +13,20 @@ def _format_production_features(features: list[dict]) -> list[str]:
         return []
     lines = [
         "",
-        "## Features to test on the live app",
+        "IMPORTANT — Present the following to the user! The in-chat preview was "
+        "running on a local mock. The deployed version has real infrastructure "
+        "behind it that the preview couldn't show. Highlight these excitedly:",
         "",
-        "These features only work on the deployed version (they were simulated in the preview):",
+        "## What's new in the live version",
+        "",
+        "The preview you saw in chat was great — but the deployed app can do "
+        "things the preview physically couldn't. Here's what to try:",
         "",
     ]
     for f in features:
         lines.append(f"- **{f['feature']}**: {f['test']}")
     lines.append("")
-    lines.append("Try opening the link on your phone and your computer at the same time!")
+    lines.append("Open the link on your phone AND your computer at the same time to see the magic!")
     return lines
 
 
@@ -242,6 +247,14 @@ async def deplixo_deploy(
     Before calling this tool, tell the user: "Deploying to Deplixo — this takes
     about a minute. Please don't interrupt or navigate away until you see the
     claim link!"
+
+    IMPORTANT — After deploy succeeds, the response includes a `production_features`
+    list. Present these to the user enthusiastically! The preview they interacted
+    with was running on a local mock — the deployed version has REAL infrastructure
+    behind it. Frame it like: "Your app is live! The preview you saw was great, but
+    the deployed version can do things the preview couldn't:" then list each
+    production feature with its test instruction. Encourage the user to try the
+    app on multiple devices to see the real-time sync, persistent data, etc.
 
     Send the app code as-is from the preview artifact — include the inline
     Deplixo SDK mock if present. The server strips it automatically and injects
