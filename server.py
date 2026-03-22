@@ -239,10 +239,13 @@ mcp = FastMCP(
         "1. User provides a local image -> call `deplixo_upload_image` RIGHT AWAY\n"
         "2. Share the upload URL with the user, ask them to upload their image there\n"
         "3. After the user confirms, call `deplixo_check_upload` to get CDN URLs\n"
-        "4. Use the CDN URLs directly in the code: <img src=\"https://cdn.deplixo.com/...\">\n"
-        "5. Show the preview — the image won't load in the preview sandbox (external URLs\n"
-        "   are blocked), but tell the user: \"The image will appear on the live site —\n"
-        "   previews can't load external images.\" The deploy will work perfectly.\n\n"
+        "4. deplixo_check_upload returns a ready-to-use <img> tag with an onerror handler.\n"
+        "   COPY-PASTE that exact tag into your code. Do NOT build your own <img> tag\n"
+        "   without the onerror. You can add styling (width, height, object-fit, etc.)\n"
+        "   but KEEP the onerror attribute — it shows a placeholder in the preview and\n"
+        "   disappears on the live site.\n"
+        "5. Show the preview. Tell the user: \"The placeholder shows where your photo\n"
+        "   will appear — it'll be there on the live site.\"\n\n"
         "Do this BEFORE building the app — the CDN URL is needed for deploy.\n"
         "NEVER try to read, encode, or embed image file data (base64, data URIs, file reads, etc.).\n"
         "NEVER ask users to upload images to external services like Imgur.\n"
@@ -1229,17 +1232,42 @@ async def deplixo_check_upload(
             )
         else:  # completed
             files = data["files"]
-            file_list = "\n".join(
-                f"- {f['url']} ({f['filename']}, {f['size_bytes']} bytes"
-                f"{f', {0}x{1}'.format(f['width'], f['height']) if f.get('width') else ''})"
-                for f in files
-            )
-            return (
-                f"Upload complete! {len(files)} file(s) ready:\n\n"
-                f"{file_list}\n\n"
-                f"Use these URLs directly in your app code (e.g., <img src=\"...\">). "
-                f"They are permanent CDN-hosted URLs."
-            )
+            parts = [f"Upload complete! {len(files)} file(s) ready:\n"]
+
+            for f in files:
+                url = f['url']
+                fname = f['filename']
+                dims = f"{f['width']}x{f['height']}" if f.get('width') else "unknown size"
+                alt = fname.rsplit('.', 1)[0].replace('-', ' ').replace('_', ' ')
+
+                onerror = (
+                    "this.onerror=null;this.style.display='none';"
+                    "var p=document.createElement('div');"
+                    "p.style.cssText='width:100%;height:300px;"
+                    "background:linear-gradient(135deg,#8b7355,#c4a882);"
+                    "display:flex;align-items:center;justify-content:center;"
+                    "color:#fff;font-size:1.1em;border-radius:12px;"
+                    "text-align:center;padding:20px';"
+                    f"p.textContent='Your image will appear here when deployed';"
+                    "this.parentNode.insertBefore(p,this)"
+                )
+
+                parts.append(f"**{fname}** ({dims})")
+                parts.append(f"URL: {url}")
+                parts.append(f"")
+                parts.append(f"IMPORTANT: Use this EXACT img tag in your code (copy-paste it):")
+                parts.append(f'<img src="{url}" alt="{alt}" onerror="{onerror}">')
+                parts.append(f"")
+                parts.append(
+                    f"The onerror handler is REQUIRED — it shows a styled placeholder "
+                    f"in the preview (where external images can't load) and disappears "
+                    f"on the live site. Do NOT remove it. Do NOT build your own img tag "
+                    f"without it. Copy-paste the tag above and add your own styling "
+                    f"(width, height, object-fit, etc.) as needed."
+                )
+                parts.append("")
+
+            return "\n".join(parts)
     except Exception as e:
         return f"Failed to check upload: {str(e)[:300]}"
 
