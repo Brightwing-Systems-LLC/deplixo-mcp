@@ -230,14 +230,20 @@ mcp = FastMCP(
         "- NEVER build custom login forms — Deplixo handles auth via hosted login pages (Google/GitHub/email)\n\n"
 
         "### Image handling\n"
-        "When a user wants to use their own images (uploaded to the conversation) in an app:\n"
-        "1. Call `deplixo_upload_image` to create an upload session\n"
-        "2. Share the upload URL with the user and ask them to upload their image(s)\n"
-        "3. After the user confirms they've uploaded, call `deplixo_check_upload` to get CDN URLs\n"
-        "4. Use the CDN URLs directly in the app code (e.g., <img src=\"https://cdn...\">)\n\n"
-        "NEVER try to embed base64 image data in the code or files dict.\n"
-        "NEVER ask users to upload images to external services.\n"
-        "If the user provides a web URL for an image, you can use it directly — no upload session needed.\n\n"
+        "IMPORTANT: When a user uploads/attaches a local image (photo, logo, screenshot) and\n"
+        "wants it used in their app, call `deplixo_upload_image` IMMEDIATELY — before building\n"
+        "any preview or writing any code. Do NOT try to read image bytes, convert to base64,\n"
+        "or embed image data inline. You cannot extract usable image bytes from conversation\n"
+        "attachments — do not attempt it.\n\n"
+        "Flow:\n"
+        "1. User provides a local image -> call `deplixo_upload_image` RIGHT AWAY\n"
+        "2. Share the upload URL with the user, ask them to upload their image there\n"
+        "3. After the user confirms, call `deplixo_check_upload` to get CDN URLs\n"
+        "4. Use the CDN URLs in both the preview AND the deployed code (<img src=\"https://cdn...\">)\n\n"
+        "Do this BEFORE building the app — the CDN URL is needed for both preview and deploy.\n"
+        "NEVER try to read, encode, or embed image file data (base64, data URIs, file reads, etc.).\n"
+        "NEVER ask users to upload images to external services like Imgur.\n"
+        "If the user provides a web URL for an image, you can use it directly — no upload needed.\n\n"
 
         "### NEVER do this\n"
         "- `// TODO: implement API call` -> Use deplixo.ai.prompt() or deplixo.proxy()\n"
@@ -1135,16 +1141,17 @@ async def deplixo_upload_image(
     description: str = "",
     max_files: int = 1,
 ) -> str:
-    """Create an upload session for the user to upload images before deploying.
-    Returns a URL where the user can drag-and-drop their images.
-    After the user uploads, call deplixo_check_upload to get the CDN URLs.
+    """Create an upload session so the user can upload their images to Deplixo's CDN.
 
-    Use this when the user provides a local image (uploaded to the conversation)
-    that they want included in their app. Do NOT try to embed base64 image data
-    in the code or files dict — it won't work.
+    CALL THIS IMMEDIATELY when a user attaches/uploads a local image they want in
+    their app. Do not try to read image bytes, convert to base64, or embed image
+    data — it won't work. Call this tool FIRST, before building any preview or code.
 
-    If the user provides a web URL for an image, you can use it directly in the
-    app code — no upload session needed.
+    Flow: call this -> share upload URL with user -> user uploads -> call
+    deplixo_check_upload -> use the CDN URLs in your code.
+
+    If the user provides a web URL (not a local file), skip this and use the URL
+    directly or pass it in the `assets` parameter of deplixo_deploy.
 
     Args:
         description: What the image is for (e.g. "hero image for pet profile page")
