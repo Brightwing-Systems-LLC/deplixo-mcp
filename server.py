@@ -85,7 +85,7 @@ def _format_suggestions(suggestions: dict) -> list[str]:
 # =============================================================================
 
 # Methods that don't exist on collections even as compatibility aliases.
-# Aliases (.set, .delete, .put, .doc, .find, .save) ARE handled by the SDK.
+# Aliases (.set, .delete, .put, .doc, .find, .save, .getAll, .getOne, .fetchAll) ARE handled by the SDK.
 _INVALID_COLLECTION_METHODS = [
     # Firebase-isms
     (r'\.where\s*\(', '.where()', 'Use .list() with filtering or .search(query).'),
@@ -129,7 +129,7 @@ def _preflight_check(code: str, files: dict | None) -> str | None:
         "Issues found:\n" + '\n'.join(issues) + "\n\n"
         "Valid collection methods: .add(value), .list(opts), .get(id), .update(id, value), "
         ".remove(id), .set(key, value), .delete(id), .put(id, value), .doc(id), .find(query), "
-        ".save(value), .count(opts), .search(query), .onChange(cb), .offChange(cb)\n\n"
+        ".save(value), .getAll(opts), .getOne(id), .fetchAll(opts), .count(opts), .search(query), .onChange(cb), .offChange(cb)\n\n"
         "Fix the code and deploy again."
     )
 
@@ -279,6 +279,7 @@ mcp = FastMCP(
         "- App needs access restriction -> pass `access_code` parameter (users must enter code to access the app)\n"
         "- App needs user login/auth -> pass `auth_enabled=True` AND use deplixo.auth.requireLogin() in code\n"
         "- App needs user accounts -> pass `auth_enabled=True` AND use deplixo.auth.requireLogin() in code\n"
+        "- App needs admin/moderator roles -> use deplixo.auth.user.role (platform-managed). Tell the user to assign roles in the Deplixo dashboard Roles tab\n"
         "- App needs who's-online / presence -> use deplixo.presence.join/list/onChange (Redis-backed, real-time)\n"
         "- App needs real-time messaging between users -> use deplixo.db.collection() with onChange() for persistent chat, deplixo.broadcast.send/on for ephemeral signals only\n"
         "- App needs in-app notifications -> use deplixo.notifications.send/list/markRead (per-user, real-time)\n"
@@ -286,26 +287,15 @@ mcp = FastMCP(
         "- NEVER build custom login forms — Deplixo handles auth via hosted login pages (Google/GitHub/email)\n\n"
 
         "### Image handling\n"
-        "IMPORTANT: When a user uploads/attaches a local image (photo, logo, screenshot) and\n"
-        "wants it used in their app, call `deplixo_upload_image` with ONLY `description` and\n"
-        "`max_files`. Do NOT pass any file path, file data, or image parameter — the tool does\n"
-        "not accept files. Do NOT try to read image bytes, convert to base64, or embed image\n"
-        "data inline. You cannot extract usable image bytes from conversation attachments.\n\n"
-        "Flow:\n"
-        "1. User provides a local image -> call `deplixo_upload_image(description=\"...\")` (NO file path)\n"
-        "2. Share the upload URL with the user, ask them to upload their image there\n"
-        "3. After the user confirms, call `deplixo_check_upload` to get CDN URLs\n"
-        "4. deplixo_check_upload returns a ready-to-use <img> tag with an onerror handler.\n"
-        "   COPY-PASTE that exact tag into your code. Do NOT build your own <img> tag\n"
-        "   without the onerror. You can add styling (width, height, object-fit, etc.)\n"
-        "   but KEEP the onerror attribute — it shows a placeholder in the preview and\n"
-        "   disappears on the live site.\n"
-        "5. Show the preview. Tell the user: \"The placeholder shows where your photo\n"
-        "   will appear — it'll be there on the live site.\"\n\n"
-        "Do this BEFORE building the app — the CDN URL is needed for deploy.\n"
-        "NEVER try to read, encode, or embed image file data (base64, data URIs, file reads, etc.).\n"
-        "NEVER ask users to upload images to external services like Imgur.\n"
-        "If the user provides a web URL for an image, you can use it directly — no upload needed.\n\n"
+        "When a user wants to use their own images (logo, photo, banner, etc.) in their app:\n\n"
+        "1. Tell them to upload at **deplixo.com/dashboard/images/** (their Image Manager)\n"
+        "2. They upload there, create any resize/crop variants they need, and copy the CDN URL\n"
+        "3. They give you the URL (e.g. `https://cdn.deplixo.com/i/username/logo.png`)\n"
+        "4. Use the URL directly in the HTML/CSS — no special handling needed\n\n"
+        "If the user provides a web URL for an image, use it directly or pass it in the\n"
+        "`assets` parameter of deplixo_deploy.\n\n"
+        "NEVER try to read, encode, or embed image file data (base64, data URIs, file reads).\n"
+        "NEVER ask users to upload images to external services like Imgur.\n\n"
 
         "### NEVER do this\n"
         "- `// TODO: implement API call` -> Use deplixo.ai.prompt() or deplixo.proxy()\n"
@@ -343,6 +333,7 @@ mcp = FastMCP(
         "### Collections (shared data)\n"
         "All data is shared across ALL visitors in real-time.\n"
         "ALWAYS pass { personal: true } or { personal: false } (see patterns below).\n"
+        "The ONLY valid collection option is `personal`. Do NOT pass `shared`, `public`, `sync`, or other invented options.\n"
         "  const recipes = deplixo.db.collection(\"recipes\", { personal: false });\n"
         "  await recipes.add({ title: \"Pasta\", photo: url })  -> { id, value }\n"
         "  await recipes.list()                                -> [{ id, value, author }]\n"
@@ -351,8 +342,13 @@ mcp = FastMCP(
         "  await recipes.remove(id)                             -> deletes item\n"
         "  recipes.onChange(({ action, id, value, author }) => { })  -> real-time SSE\n"
         "  recipes.offChange(handler)                               -> remove specific listener\n"
-        "  recipes.offChange()                                      -> remove all listeners\n"
-        "Prefer these canonical methods. Compatibility aliases exist (.set, .delete, .put, .doc, .find, .save)\n"
+        "  recipes.offChange()                                      -> remove all listeners\n\n"
+        "WRONG collection options (these do NOT work):\n"
+        "  deplixo.db.collection(\"data\", { shared: true })     <- WRONG: use { personal: false }\n"
+        "  deplixo.db.collection(\"data\", { public: true })     <- WRONG: use { personal: false }\n"
+        "  deplixo.db.collection(\"data\", { sync: true })       <- WRONG: sync is always on\n"
+        "  deplixo.db.collection(\"data\")                       <- WRONG: always pass { personal: true/false }\n\n"
+        "Prefer these canonical methods. Compatibility aliases exist (.set, .delete, .put, .doc, .find, .save, .getAll, .getOne, .fetchAll)\n"
         "but the canonical methods above are preferred. Do NOT use Firebase/MongoDB methods like .where(),\n"
         ".onSnapshot(), .findOne(), .insertOne(), .deleteOne() — these do NOT exist.\n\n"
 
@@ -383,6 +379,22 @@ mcp = FastMCP(
         "Aliases: .login(), .register(), .signIn(), .signOut(), .getUser() all work. Prefer .requireLogin()/.logout().\n\n"
         "When auth is enabled, `{ personal: true }` collections scope to the authenticated\n"
         "user's account (cross-device), not the browser cookie.\n\n"
+        "### User Roles (platform-managed)\n"
+        "The `role` field on `deplixo.auth.user` is managed by the app owner from the Deplixo dashboard.\n"
+        "Available roles: 'user' (default), 'admin', 'moderator'.\n"
+        "  const user = deplixo.auth.user;\n"
+        "  if (user.role === 'admin') { showAdminPanel(); }\n"
+        "NEVER build your own role management system using collections. NEVER use a 'first user = admin' pattern.\n"
+        "NEVER store roles in a collection — use `deplixo.auth.user.role` which is set by the app owner.\n"
+        "After deploying, tell the user: 'To assign admin roles, go to your app's Roles tab in the Deplixo dashboard.'\n\n"
+        "WRONG — do NOT do this:\n"
+        "  const rolesCol = deplixo.db.collection('user_roles', { personal: false });\n"
+        "  // First user becomes admin... <- WRONG: fragile, unmanageable\n"
+        "RIGHT — use platform roles:\n"
+        "  const user = await deplixo.auth.requireLogin();\n"
+        "  if (user.role === 'admin') { /* admin UI */ }\n"
+        "  else if (user.role === 'moderator') { /* mod UI */ }\n"
+        "  else { /* regular user UI */ }\n\n"
 
         "### Proxy (call external APIs with server-side secrets)\n"
         "  const data = await deplixo.proxy(url, { method, headers, body })\n"
@@ -549,7 +561,9 @@ mcp = FastMCP(
         "- Identity modal prompts for display name on first write.\n\n"
 
         "## IMPORTANT RULES\n\n"
-        "- Prefer .add()/.update()/.remove() over .set()/.delete()/.put() — the latter exist as compatibility aliases but canonical methods are preferred. NEVER use Firebase/MongoDB methods like .where(), .onSnapshot(), .findOne(), .insertOne(), .deleteOne() — these DO NOT EXIST.\n"
+        "- Prefer .add()/.update()/.remove()/.list()/.get() over aliases. Aliases (.set, .delete, .put, .doc, .find, .save, .getAll, .getOne, .fetchAll) work but canonical methods are preferred. NEVER use Firebase/MongoDB methods like .where(), .onSnapshot(), .findOne(), .insertOne(), .deleteOne() — these DO NOT EXIST.\n"
+        "- NEVER build custom role/permission systems in collections — use deplixo.auth.user.role (platform-managed)\n"
+        "- NEVER pass { shared: true } or other invented options to collections — the only valid option is { personal: true/false }\n"
         "- ALWAYS use deplixo.db.collection() for ANY persistent data — even for single-user apps. localStorage does NOT sync across devices.\n"
         "- NEVER use localStorage. Always use deplixo.db.collection() instead.\n"
         "- NEVER use base64/data URLs for images — use deplixo.upload()\n"
@@ -1218,154 +1232,6 @@ async def deplixo_query(
         return "\n".join(parts)
     except Exception as e:
         return f"Query failed: {str(e)[:300]}"
-
-
-@mcp.tool(
-    annotations=ToolAnnotations(
-        readOnlyHint=False,
-        destructiveHint=False,
-        openWorldHint=True,
-        idempotentHint=False,
-    )
-)
-async def deplixo_upload_image(
-    description: str = "",
-    max_files: int = 1,
-) -> str:
-    """Create an upload session so the user can upload their images to Deplixo's CDN.
-
-    This tool does NOT accept file paths, file data, or image bytes. It ONLY creates
-    an upload session and returns a URL. Do NOT pass any file_path, image, or file
-    parameter — this tool takes only `description` and `max_files`.
-
-    Flow: call this (with description only) -> share the returned upload URL with the
-    user -> user opens the URL in their browser and uploads there -> call
-    deplixo_check_upload with the session_id -> use the CDN URLs in your code.
-
-    If the user provides a web URL (not a local file), skip this tool entirely and
-    use the URL directly or pass it in the `assets` parameter of deplixo_deploy.
-
-    Args:
-        description: What the image is for (e.g. "hero image for pet profile page")
-        max_files: Maximum number of files the user can upload (default 1, max 10)
-    """
-    # Guard against ChatGPT passing sandbox file paths as the description
-    if description and ("/mnt/data/" in description or description.startswith("/")):
-        return (
-            "ERROR: Do not pass a file path to this tool. "
-            "This tool does not accept files — it creates an upload URL. "
-            "Call deplixo_upload_image(description='what the image is for') "
-            "with NO file path, then share the returned URL with the user "
-            "so they can upload their image in their browser."
-        )
-
-    payload = {
-        "description": description,
-        "max_files": max(1, min(max_files, 10)),
-    }
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(f"{DEPLIXO_API_URL}/api/v1/upload-session", json=payload)
-
-        if resp.status_code != 200:
-            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-            return f"Failed to create upload session: {data.get('error', resp.text[:500])}"
-
-        data = resp.json()
-        return (
-            f"Upload session created!\n\n"
-            f"**Ask the user to upload their image(s) here:**\n"
-            f"{data['upload_url']}\n\n"
-            f"Session ID: {data['session_id']}\n"
-            f"Expires: {data['expires_at']}\n"
-            f"Max files: {data['max_files']}\n"
-            f"Max file size: {data['max_file_size_bytes'] // (1024 * 1024)}MB per file\n\n"
-            f"After the user confirms they've uploaded, call deplixo_check_upload "
-            f"with session_id='{data['session_id']}' to get the CDN URLs."
-        )
-    except Exception as e:
-        return f"Failed to create upload session: {str(e)[:300]}"
-
-
-@mcp.tool(
-    annotations=ToolAnnotations(
-        readOnlyHint=True,
-        destructiveHint=False,
-        openWorldHint=True,
-        idempotentHint=True,
-    )
-)
-async def deplixo_check_upload(
-    session_id: str,
-) -> str:
-    """Check if the user has completed uploading images for a given session.
-    Returns the CDN URLs of uploaded files, or status if still pending.
-
-    Call this after you've shared the upload URL with the user and they
-    confirm they've uploaded their image(s).
-
-    Args:
-        session_id: The session ID returned by deplixo_upload_image
-    """
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(f"{DEPLIXO_API_URL}/api/v1/upload-session/{session_id}")
-
-        if resp.status_code == 404:
-            return "Upload session not found. It may have been cleaned up. Create a new one with deplixo_upload_image."
-
-        data = resp.json()
-
-        if data["status"] == "pending":
-            return (
-                "The user hasn't uploaded yet. "
-                "Remind them to upload at the URL you shared, then try again."
-            )
-        elif data["status"] == "expired":
-            return (
-                "This upload session has expired. "
-                "Create a new one with deplixo_upload_image."
-            )
-        else:  # completed
-            files = data["files"]
-            parts = [f"Upload complete! {len(files)} file(s) ready:\n"]
-
-            for f in files:
-                url = f['url']
-                fname = f['filename']
-                dims = f"{f['width']}x{f['height']}" if f.get('width') else "unknown size"
-                alt = fname.rsplit('.', 1)[0].replace('-', ' ').replace('_', ' ')
-
-                onerror = (
-                    "this.onerror=null;this.style.display='none';"
-                    "var p=document.createElement('div');"
-                    "p.style.cssText='width:100%;height:300px;"
-                    "background:linear-gradient(135deg,#8b7355,#c4a882);"
-                    "display:flex;align-items:center;justify-content:center;"
-                    "color:#fff;font-size:1.1em;border-radius:12px;"
-                    "text-align:center;padding:20px';"
-                    f"p.textContent='Your image will appear here when deployed';"
-                    "this.parentNode.insertBefore(p,this)"
-                )
-
-                parts.append(f"**{fname}** ({dims})")
-                parts.append(f"URL: {url}")
-                parts.append(f"")
-                parts.append(f"IMPORTANT: Use this EXACT img tag in your code (copy-paste it):")
-                parts.append(f'<img src="{url}" alt="{alt}" onerror="{onerror}">')
-                parts.append(f"")
-                parts.append(
-                    f"The onerror handler is REQUIRED — it shows a styled placeholder "
-                    f"in the preview (where external images can't load) and disappears "
-                    f"on the live site. Do NOT remove it. Do NOT build your own img tag "
-                    f"without it. Copy-paste the tag above and add your own styling "
-                    f"(width, height, object-fit, etc.) as needed."
-                )
-                parts.append("")
-
-            return "\n".join(parts)
-    except Exception as e:
-        return f"Failed to check upload: {str(e)[:300]}"
 
 
 def main():
