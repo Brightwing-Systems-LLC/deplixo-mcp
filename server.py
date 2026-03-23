@@ -231,12 +231,12 @@ mcp = FastMCP(
 
         "### Image handling\n"
         "IMPORTANT: When a user uploads/attaches a local image (photo, logo, screenshot) and\n"
-        "wants it used in their app, call `deplixo_upload_image` IMMEDIATELY — before building\n"
-        "any preview or writing any code. Do NOT try to read image bytes, convert to base64,\n"
-        "or embed image data inline. You cannot extract usable image bytes from conversation\n"
-        "attachments — do not attempt it.\n\n"
+        "wants it used in their app, call `deplixo_upload_image` with ONLY `description` and\n"
+        "`max_files`. Do NOT pass any file path, file data, or image parameter — the tool does\n"
+        "not accept files. Do NOT try to read image bytes, convert to base64, or embed image\n"
+        "data inline. You cannot extract usable image bytes from conversation attachments.\n\n"
         "Flow:\n"
-        "1. User provides a local image -> call `deplixo_upload_image` RIGHT AWAY\n"
+        "1. User provides a local image -> call `deplixo_upload_image(description=\"...\")` (NO file path)\n"
         "2. Share the upload URL with the user, ask them to upload their image there\n"
         "3. After the user confirms, call `deplixo_check_upload` to get CDN URLs\n"
         "4. deplixo_check_upload returns a ready-to-use <img> tag with an onerror handler.\n"
@@ -1149,20 +1149,31 @@ async def deplixo_upload_image(
 ) -> str:
     """Create an upload session so the user can upload their images to Deplixo's CDN.
 
-    CALL THIS IMMEDIATELY when a user attaches/uploads a local image they want in
-    their app. Do not try to read image bytes, convert to base64, or embed image
-    data — it won't work. Call this tool FIRST, before building any preview or code.
+    This tool does NOT accept file paths, file data, or image bytes. It ONLY creates
+    an upload session and returns a URL. Do NOT pass any file_path, image, or file
+    parameter — this tool takes only `description` and `max_files`.
 
-    Flow: call this -> share upload URL with user -> user uploads -> call
-    deplixo_check_upload -> use the CDN URLs in your code.
+    Flow: call this (with description only) -> share the returned upload URL with the
+    user -> user opens the URL in their browser and uploads there -> call
+    deplixo_check_upload with the session_id -> use the CDN URLs in your code.
 
-    If the user provides a web URL (not a local file), skip this and use the URL
-    directly or pass it in the `assets` parameter of deplixo_deploy.
+    If the user provides a web URL (not a local file), skip this tool entirely and
+    use the URL directly or pass it in the `assets` parameter of deplixo_deploy.
 
     Args:
         description: What the image is for (e.g. "hero image for pet profile page")
         max_files: Maximum number of files the user can upload (default 1, max 10)
     """
+    # Guard against ChatGPT passing sandbox file paths as the description
+    if description and ("/mnt/data/" in description or description.startswith("/")):
+        return (
+            "ERROR: Do not pass a file path to this tool. "
+            "This tool does not accept files — it creates an upload URL. "
+            "Call deplixo_upload_image(description='what the image is for') "
+            "with NO file path, then share the returned URL with the user "
+            "so they can upload their image in their browser."
+        )
+
     payload = {
         "description": description,
         "max_files": max(1, min(max_files, 10)),
