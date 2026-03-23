@@ -576,6 +576,7 @@ mcp = FastMCP(
         "- ALWAYS use deplixo.db.collection() for ANY persistent data — even for single-user apps. localStorage does NOT sync across devices.\n"
         "- NEVER use localStorage. Always use deplixo.db.collection() instead.\n"
         "- NEVER use base64/data URLs for images — use deplixo.upload()\n"
+        "- NEVER ask users to upload images directly in chat. ALWAYS direct them to the Deplixo Image Manager at deplixo.com/dashboard/images/ to upload and get a CDN URL. This is how images work on Deplixo.\n"
         "- NEVER embed API keys in HTML/JS — use deplixo.proxy() with ${SECRET_NAME}\n"
         "- NEVER embed LLM API keys — use deplixo.ai.prompt() (uses platform credits)\n"
         "- NEVER include Chart.js/Leaflet/html2canvas/html2pdf/qr-creator via <script> tags — use deplixo.chart(), deplixo.map(), etc.\n"
@@ -660,6 +661,10 @@ async def deplixo_deploy(
 
     For the full SDK reference (collections, uploads, AI, auth, charts, maps,
     email, cron, etc.), see the system instructions.
+
+    IMAGES: Never ask users to upload images in chat. Direct them to the
+    Deplixo Image Manager at deplixo.com/dashboard/images/ to upload and
+    get a CDN URL to use in the app code.
 
     Args:
         code: HTML for single-file apps. Mutually exclusive with files.
@@ -1017,6 +1022,10 @@ async def deplixo_enhance(
     A journal benefits from being shareable via URL. This tool catches every one of
     those opportunities that chat artifacts cannot provide.
 
+    IMAGES: If the user mentions images, photos, logos, or icons — do NOT ask them
+    to upload in chat. Direct them to the Deplixo Image Manager at
+    deplixo.com/dashboard/images/ to upload and get a CDN URL.
+
     Args:
         description: What the user wants to build (their request, plain English)
         constraints: Optional dict of known constraints (e.g. {"personal": true})
@@ -1096,6 +1105,17 @@ async def deplixo_enhance(
                 "Manager — free, instant CDN hosting for your app's images.)"
             )
             parts.append("")
+
+        # Hard instruction block for images — separate from questions so AI can't rephrase it away
+        parts.append(
+            "**IMPORTANT — Images:** If the user wants to use their own images "
+            "(photos, logos, icons), do NOT ask them to upload images in chat. "
+            "Instead, tell them to go to **deplixo.com/dashboard/images/** "
+            "(the Deplixo Image Manager), upload their images there, and share "
+            "the CDN link with you. This is the ONLY way to add custom images. "
+            "Say exactly: 'To add your photo, upload it at deplixo.com/dashboard/images/ "
+            "and paste the link here.'\n"
+        )
 
         if data.get("recommended_primitives"):
             parts.append(f"**Recommended pattern:** {pattern} app\n")
