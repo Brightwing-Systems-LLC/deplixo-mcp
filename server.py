@@ -200,6 +200,7 @@ _SDK_FEATURE_PATTERNS = [
     ("deplixo.forms", "Form validation"),
     ("deplixo.timers", "Timers"),
     ("deplixo.sql", "SQL (direct DB)"),
+    ("deplixo.location", "Geolocation"),
 ]
 
 
@@ -371,6 +372,54 @@ _SDK_SNIPPETS = {
         "  ```js\n"
         "  const editor = deplixo.editor(el, { placeholder: \"Write...\" });\n"
         "  editor.getContent(); editor.onChange(html => { });\n"
+        "  ```"
+    ),
+    "deplixo.embed": (
+        "  ```js\n"
+        "  deplixo.embed.youtube(containerEl, \"dQw4w9WgXcQ\", { autoplay: true });\n"
+        "  deplixo.embed.codepen(el, url, { theme: \"dark\" });\n"
+        "  deplixo.embed.iframe(el, url, { height: \"400\" });\n"
+        "  ```"
+    ),
+    "deplixo.sql": (
+        "  ```js\n"
+        "  const rows = await deplixo.sql.query(\"SELECT * FROM users WHERE age > ?\", [18]);\n"
+        "  await deplixo.sql.run(\"INSERT INTO logs (msg) VALUES (?)\", [\"hello\"]);\n"
+        "  await deplixo.sql.exec(\"CREATE TABLE IF NOT EXISTS logs (msg TEXT)\");\n"
+        "  ```"
+    ),
+    "deplixo.reactions": (
+        "  ```js\n"
+        "  await deplixo.reactions.toggle(\"post-123\", \"👍\");\n"
+        "  const { counts } = await deplixo.reactions.get(\"post-123\");\n"
+        "  deplixo.reactions.onChange(({ target, counts }) => { });\n"
+        "  ```"
+    ),
+    "deplixo.locks": (
+        "  ```js\n"
+        "  const lock = await deplixo.locks.acquire(\"edit-doc-1\", { ttl: 30 });\n"
+        "  // ... do work ...\n"
+        "  await deplixo.locks.release(\"edit-doc-1\");\n"
+        "  ```"
+    ),
+    "deplixo.forms": (
+        "  ```js\n"
+        "  await deplixo.forms.create({ fields: [{ name: \"email\", type: \"email\" }] });\n"
+        "  await deplixo.forms.submit(formId, { email: \"user@example.com\" });\n"
+        "  ```"
+    ),
+    "deplixo.location": (
+        "  ```js\n"
+        "  const { lat, lng } = await deplixo.location.get();\n"
+        "  const map = await deplixo.map(el, { center: [lat, lng], zoom: 14 });\n"
+        "  ```"
+    ),
+    "deplixo.cron": (
+        "  ```js\n"
+        "  // Deploy with: cron=[{\"name\": \"daily\", \"schedule\": \"0 9 * * *\",\n"
+        "  //   \"action\": \"event\", \"config\": {\"event_type\": \"daily-task\"}}]\n"
+        "  const jobs = await deplixo.cron.list();\n"
+        "  await deplixo.cron.pause(\"daily\");\n"
         "  ```"
     ),
 }
