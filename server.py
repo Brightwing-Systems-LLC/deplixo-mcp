@@ -770,8 +770,7 @@ async def deplixo_deploy(
     SDK mock if present. The server strips it automatically and injects the
     real SDK.
 
-    Full SDK reference with method signatures, data types, and examples:
-    https://deplixo.com/sdk
+    REQUIRED: Fetch https://deplixo.com/sdk before writing any SDK calls to verify method signatures.
 
     CRITICAL — Collection data shape: .list(), .get(), and .add() return entries
     where user data is wrapped in a `value` property. Access fields via
