@@ -222,20 +222,24 @@ def _detect_sdk_features(code: str) -> list[str]:
 _SDK_SNIPPETS = {
     "deplixo.db.collection": (
         "  ```js\n"
+        "  await deplixo.ready;\n"
         "  const col = deplixo.db.collection(\"items\", { personal: false });\n"
+        "  col.onChange(({ action, id, value }) => { }); // register BEFORE reads\n"
         "  await col.add({ title: \"Hello\" });          // -> { id, value, author }\n"
         "  const items = await col.list();              // -> [{ id, value, author }]\n"
         "  await col.update(id, { title: \"Updated\" }); // merges fields\n"
-        "  col.onChange(({ action, id, value }) => { }); // real-time\n"
         "  ```"
     ),
     "deplixo.ai": (
         "  ```js\n"
+        "  await deplixo.ready;\n"
         "  const answer = await deplixo.ai.prompt(\"Generate 5 quiz questions\");\n"
+        "  // string prompt returns string\n"
         "  const result = await deplixo.ai.prompt({\n"
         "    system: \"Return JSON: { items: [...] }\",\n"
         "    user: userInput, json: true\n"
         "  });\n"
+        "  // json:true returns a parsed object, use result.items directly\n"
         "  ```"
     ),
     "deplixo.auth": (
@@ -629,11 +633,13 @@ mcp = FastMCP(
         "### Example: Brand Name Generator (the RIGHT way)\n"
         "Instead of returning hardcoded names, wire the form to deplixo.ai.prompt():\n\n"
         "    async function generateNames(businessInfo) {\n"
+        "      await deplixo.ready;\n"
         "      const result = await deplixo.ai.prompt({\n"
         "        system: \"You are a branding expert. Generate 10 creative brand names. Return JSON: { names: [{ name, tagline, reasoning }] }\",\n"
         "        user: `Business: ${businessInfo.description}\\nValues: ${businessInfo.values}`,\n"
         "        json: true\n"
         "      });\n"
+        "      // json:true returns a parsed object — use result.names directly\n"
         "      return result.names;\n"
         "    }\n\n"
 
