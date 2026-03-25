@@ -352,8 +352,14 @@ _SDK_SNIPPETS = {
     ),
     "deplixo.camera": (
         "  ```js\n"
-        "  const blob = await deplixo.camera.photo({ facing: \"environment\" });\n"
+        "  // Live viewfinder: start() returns { capture(), stop() }\n"
+        "  const cam = await deplixo.camera.start(el, { facing: \"user\" });\n"
+        "  const blob = await cam.capture(); // JPEG Blob\n"
+        "  cam.stop();\n"
         "  const { url } = await deplixo.upload(new File([blob], \"photo.jpg\"));\n"
+        "  \n"
+        "  // One-shot (no preview):\n"
+        "  const blob2 = await deplixo.camera.photo({ facing: \"environment\" });\n"
         "  ```"
     ),
     "deplixo.sound": (
@@ -567,7 +573,7 @@ mcp = FastMCP(
         "- App needs sounds/audio -> use deplixo.sound.play(\"@ping\") (8 built-in sounds)\n"
         "- App needs CSV/JSON export -> use deplixo.export.csv() / .json() / .file()\n"
         "- App needs YouTube/embed -> use deplixo.embed.youtube() / .codepen() / .iframe()\n"
-        "- App needs camera -> use deplixo.camera.photo() (getUserMedia)\n"
+        "- App needs camera -> use deplixo.camera.start(el, opts) for live viewfinder + cam.capture(), or deplixo.camera.photo() for one-shot. Upload blob with deplixo.upload()\n"
         "- App needs rich text editor -> use deplixo.editor(el) (contentEditable + toolbar)\n"
         "- App needs sharing -> use deplixo.share() (Web Share API + clipboard fallback)\n"
         "- App needs custom images/logo/photos -> user uploads at deplixo.com/dashboard/images/ (Deplixo Image Manager) and shares CDN URL. NEVER use Imgur, base64, or data URIs.\n"
