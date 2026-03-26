@@ -7,6 +7,10 @@ dev:
 dev-http:
     uv run python http_server.py
 
+# Local dev: HTTP server pointing to local Django (verbose logging, ngrok-compatible)
+dev-local:
+    DEPLIXO_API_URL=http://localhost:8895 uv run python http_server.py
+
 # =============================================================================
 # Production Commands
 # =============================================================================
