@@ -3,7 +3,26 @@ import pytest
 import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import server
 from server import deplixo_deploy, deplixo_read_source, mcp
+
+
+@pytest.fixture(autouse=True)
+def _pre_populate_registry_cache():
+    """Pre-populate the registry cache with minimal data so tests don't make real HTTP calls."""
+    server._registry_cache = [
+        {
+            "id": "collections", "namespace": "deplixo.db.collection", "name": "Collections",
+            "category": "data-storage", "description": {"short": "Persistent data"},
+            "methods": [], "icon": "", "tags": [], "related": [], "deploy_flags": [],
+            "credits": None, "snippet": "", "anti_patterns": "",
+            "contrast": {"feature": "Persistent data", "without": "Data disappears", "with": "Data persists"},
+            "sdk_feature_label": "Collections", "sdk_feature_pattern": "deplixo.db.collection",
+            "detection": {}, "production_features": [],
+        },
+    ]
+    yield
+    server._registry_cache = None
 
 
 @pytest.mark.asyncio

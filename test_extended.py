@@ -3,6 +3,7 @@ import pytest
 import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import server
 from server import (
     deplixo_capabilities,
     deplixo_deploy,
@@ -10,6 +11,35 @@ from server import (
     deplixo_query,
     deplixo_read_source,
 )
+
+
+@pytest.fixture(autouse=True)
+def _pre_populate_registry_cache():
+    """Pre-populate the registry cache with minimal data so tests don't make real HTTP calls."""
+    server._registry_cache = [
+        {
+            "id": "collections", "namespace": "deplixo.db.collection", "name": "Collections",
+            "category": "data-storage", "description": {"short": "Persistent data"},
+            "methods": [], "icon": "", "tags": [], "related": [], "deploy_flags": [],
+            "credits": None, "snippet": "await deplixo.ready;\nconst col = deplixo.db.collection('items', { personal: true });",
+            "anti_patterns": "NEVER omit { personal: true/false }",
+            "contrast": {"feature": "Persistent data", "without": "Data disappears when they close the tab", "with": "Data persists forever and syncs across devices"},
+            "sdk_feature_label": "Collections", "sdk_feature_pattern": "deplixo.db.collection",
+            "detection": {}, "production_features": [],
+        },
+        {
+            "id": "ai", "namespace": "deplixo.ai", "name": "AI",
+            "category": "ai", "description": {"short": "AI/LLM calls"},
+            "methods": [], "icon": "", "tags": [], "related": [], "deploy_flags": [],
+            "credits": None, "snippet": "const result = await deplixo.ai.prompt({ system: '...', user: input, json: true });",
+            "anti_patterns": "NEVER use a bare string prompt for structured output",
+            "contrast": {"feature": "AI-powered content", "without": "Static hardcoded content", "with": "AI generates content on demand"},
+            "sdk_feature_label": "AI", "sdk_feature_pattern": "deplixo.ai.prompt",
+            "detection": {}, "production_features": [],
+        },
+    ]
+    yield
+    server._registry_cache = None
 
 
 # ---------- deplixo_deploy — error paths ----------
@@ -185,7 +215,7 @@ class TestEnhance:
             result = await deplixo_enhance("a recipe app")
             assert "Enhancement Analysis" in result
             assert "Persistent data" in result
-            assert "AI content" in result
+            assert "AI" in result  # contrast comes from registry
 
 
 # ---------- deplixo_capabilities ----------
@@ -195,7 +225,7 @@ class TestCapabilities:
     async def test_returns_markdown(self):
         result = await deplixo_capabilities()
         assert "Deplixo Platform Capabilities" in result
-        assert "Data & Sync" in result
+        assert "Collections" in result  # from registry fixture
         assert "deplixo_deploy" in result
 
 
