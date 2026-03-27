@@ -10,6 +10,23 @@ logger = logging.getLogger(__name__)
 
 DEPLIXO_API_URL = os.environ.get("DEPLIXO_API_URL", "https://deplixo.com")
 
+
+async def _log_mcp_call(session_id: str, tool: str, mcp_request: dict,
+                        mcp_response: str, app_id: str = ""):
+    """Log the full MCP-level request/response to Django for auditing."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(f"{DEPLIXO_API_URL}/api/v1/mcp-log", json={
+                "session_id": session_id,
+                "tool": tool,
+                "mcp_request": mcp_request,
+                "mcp_response": mcp_response,
+                "app_id": app_id,
+            })
+    except Exception as e:
+        logger.debug("MCP log failed (non-critical): %s", e)
+
+
 # =============================================================================
 # Primitives Registry Cache — fetched from API, replaces hardcoded patterns
 # =============================================================================
@@ -162,6 +179,52 @@ def _preflight_check(code: str, files: dict | None) -> str | None:
                 line_num = full_code[:match.start()].count('\n') + 1
                 issues.append(f"  - Line ~{line_num}: {method} does not exist on collections. {fix}")
 
+    # Check for top-level await (kills the entire script in non-module scripts)
+    # Look for `await` that's NOT inside an async function
+    import re as _re
+    _script_blocks = _re.findall(r'<script[^>]*>(.*?)</script>', full_code, _re.DOTALL | _re.IGNORECASE)
+    for block in _script_blocks:
+        if 'type="module"' in block or "type='module'" in block:
+            continue
+        # Strip out async function bodies to find bare top-level awaits
+        stripped = _re.sub(r'async\s+function\s+\w+\s*\([^)]*\)\s*\{', '/*ASYNC_START*/', block)
+        # Also strip arrow async: async () => { and async (x) => {
+        stripped = _re.sub(r'async\s*\([^)]*\)\s*=>\s*\{', '/*ASYNC_START*/', stripped)
+        # Find await that's before any function definition (top-level)
+        lines = stripped.split('\n')
+        brace_depth = 0
+        for i, line in enumerate(lines):
+            if '/*ASYNC_START*/' in line:
+                brace_depth += 1
+                continue
+            brace_depth += line.count('{') - line.count('}')
+            if brace_depth <= 0 and _re.search(r'\bawait\b', line):
+                issues.append(
+                    f"  - Top-level `await` found outside an async function. "
+                    "This silently kills the entire script. Move `await deplixo.ready` "
+                    "and other await calls inside an async function (e.g. your submit handler)."
+                )
+                break
+        if issues and 'Top-level' in issues[-1]:
+            break
+
+    # Check for collections in email-only apps (causes name prompt popup)
+    has_email_send = 'deplixo.email.send' in full_code
+    has_collection = 'deplixo.db.collection' in full_code
+    if has_email_send and has_collection:
+        # Check if the collection looks like a contact/support form pattern
+        _form_collection_names = ['support', 'contact', 'ticket', 'submission', 'inquiry', 'feedback', 'request']
+        for name in _form_collection_names:
+            if f"collection('{name}" in full_code or f'collection("{name}' in full_code:
+                match = re.search(r"collection\(['\"]" + name, full_code)
+                line_num = full_code[:match.start()].count('\n') + 1 if match else 0
+                issues.append(
+                    f"  - Line ~{line_num}: deplixo.db.collection('{name}...') is unnecessary. "
+                    "All emails sent via deplixo.email.send() are automatically logged in the app's database. "
+                    "Remove the collection — it causes a name prompt popup and wastes credits."
+                )
+                break
+
     # Check for fabricated relative image paths (these files don't exist)
     _FAKE_IMAGE_PATTERNS = [
         (r'src=["\'](?:images|assets|img|pics|photos)/[^"\']+\.(?:png|jpg|jpeg|gif|svg|webp)["\']', 'Relative image path'),
@@ -269,8 +332,10 @@ def _detect_sdk_features(code: str, registry: list[dict] | None = None) -> list[
 _SDK_SNIPPETS = {
     "deplixo.db.collection": (
         "  ```js\n"
+        "  // IMPORTANT: all await calls MUST be inside an async function, NOT at script top level\n"
         "  await deplixo.ready;\n"
-        "  const col = deplixo.db.collection(\"items\", { personal: false });\n"
+        "  // personal: true = single-user (default). personal: false = multi-user (shows name prompt)\n"
+        "  const col = deplixo.db.collection(\"items\", { personal: true });\n"
         "  col.onChange(({ action, id, value }) => { }); // register BEFORE reads\n"
         "  await col.add({ title: \"Hello\" });          // -> { id, value, author }\n"
         "  const items = await col.list();              // -> [{ id, value, author }]\n"
@@ -312,10 +377,25 @@ _SDK_SNIPPETS = {
     ),
     "deplixo.email": (
         "  ```js\n"
+        "  // Emails arrive FROM \"Owner Name <deplixo@brightwingsystems.com>\"\n"
+        "  // All sent emails are automatically logged in the app's database\n"
+        "  // You can send to ANY address (2 credits each)\n"
         "  await deplixo.email.send({\n"
-        "    to: \"user@example.com\", subject: \"Hello\",\n"
+        "    to: \"recipient@example.com\", subject: \"Hello\",\n"
+        "    reply_to: \"sender@example.com\",  // optional — overrides default owner reply-to\n"
         "    body: \"Plain text\", html: \"<h1>HTML</h1>\"\n"
         "  }); // 2 credits per email\n"
+        "  ```\n\n"
+        "  **Contact/support forms:** Use reply_to so the recipient can reply directly\n"
+        "  to the form submitter. No collection needed — emails are auto-logged.\n"
+        "  ```js\n"
+        "  await deplixo.email.send({\n"
+        "    to: 'support@company.com',\n"
+        "    reply_to: userEmail,  // replies go to the form submitter, not the app owner\n"
+        "    subject: 'Support: ' + firstName + ' ' + lastName,\n"
+        "    body: 'Name: ' + firstName + '\\nEmail: ' + userEmail + '\\n\\n' + message,\n"
+        "    html: '...' // formatted HTML\n"
+        "  });\n"
         "  ```"
     ),
     "deplixo.presence": (
@@ -624,7 +704,8 @@ mcp = FastMCP(
         "- App needs rich text editor -> use deplixo.editor(el) (contentEditable + toolbar)\n"
         "- App needs sharing -> use deplixo.share() (Web Share API + clipboard fallback)\n"
         "- App needs custom images/logo/photos -> user uploads at https://deplixo.com/dashboard/images/ (Deplixo Image Manager) and shares CDN URL. NEVER use Imgur, base64, or data URIs.\n"
-        "- App needs to send emails -> use deplixo.email.send() (Postmark, 2 credits/email)\n"
+        "- App needs to send emails -> use deplixo.email.send() (Postmark, 2 credits/email). Emails arrive FROM 'Owner Name <deplixo@brightwingsystems.com>'. All sent emails are auto-logged in the app's database (no collection needed). NEVER tell users emails come from app@deplixo.com or any custom domain.\n"
+        "- App needs a contact/support form -> use deplixo.email.send() with reply_to set to the form submitter's email, so the recipient can reply directly to them. No collection needed — emails are auto-logged. Do NOT use deplixo.db.collection for contact forms.\n"
         "- App needs email signups/newsletter -> use deplixo.email.register() + .isRegistered()\n"
         "- App needs external event handling -> use deplixo.webhooks.on(name, handler) for inbound webhooks\n"
         "- App needs scheduled/recurring tasks -> pass `cron` parameter with job definitions (server-side, runs even when nobody's online)\n"
@@ -664,7 +745,9 @@ mcp = FastMCP(
         "- `// TODO: implement API call` -> Use deplixo.ai.prompt() or deplixo.proxy()\n"
         "- `return hardcodedSampleData` -> Wire to a real data source\n"
         "- `function search() { /* implement later */ }` -> Implement it now\n"
-        "- `alert(\"Feature coming soon\")` -> Either build it or don't include the button\n\n"
+        "- `alert(\"Feature coming soon\")` -> Either build it or don't include the button\n"
+        "- Using deplixo.db.collection for contact/support form submissions -> Don't. All emails sent via deplixo.email.send() are automatically logged. Use reply_to for the submitter's email.\n"
+        "- Claiming emails come from `app@deplixo.com` or any custom address -> Emails always come from `Owner Name <deplixo@brightwingsystems.com>` with reply-to set to owner's email. Never promise otherwise.\n\n"
 
         "### ALWAYS do this\n"
         "- If the app generates content (names, stories, quizzes, plans, recipes):\n"
@@ -710,9 +793,10 @@ mcp = FastMCP(
         "     CORRECT: entry.value.title\n"
         "     WRONG:   entry.title        (undefined — #1 cause of blank screens)\n\n"
         "3. ALWAYS pass { personal: true/false } to collections:\n"
-        "     CORRECT: deplixo.db.collection(\"data\", { personal: false })\n"
+        "     CORRECT: deplixo.db.collection(\"data\", { personal: true })\n"
         "     WRONG:   deplixo.db.collection(\"data\")\n"
-        "     WRONG:   deplixo.db.collection(\"data\", { shared: true })\n\n"
+        "     WRONG:   deplixo.db.collection(\"data\", { shared: true })\n"
+        "     Use personal: false ONLY for multi-user apps (chat, shared lists) where users see each other.\n\n"
         "4. Register onChange() BEFORE calling .list() or .add():\n"
         "     col.onChange(callback);   // first\n"
         "     await col.list();         // then read\n"
@@ -792,6 +876,7 @@ async def deplixo_deploy(
     auth_allowed_domains: list[str] | None = None,
     cron: list[dict] | None = None,
     assets: list[dict] | None = None,
+    session_id: str = "",
 ) -> str:
     """Deploy a web app to Deplixo and get a live URL with real infrastructure —
     persistent data, real-time sync, AI, auth, email, and 30+ building blocks.
@@ -832,8 +917,9 @@ async def deplixo_deploy(
 
     3. REQUIRED: Always pass { personal: true/false } to collections:
        ```js
-       CORRECT: deplixo.db.collection("data", { personal: false })
+       CORRECT: deplixo.db.collection("data", { personal: true })
        WRONG:   deplixo.db.collection("data")  // defaults are unreliable
+       // Use personal: false ONLY for multi-user apps where users see each other
        ```
 
     4. REQUIRED: Register onChange() BEFORE any reads:
@@ -887,6 +973,9 @@ async def deplixo_deploy(
               trim-collection|random-pick|fetch), config (dict).
         assets: External image URLs to download and host on CDN. List of dicts
                 with: url (source URL), path (target path like "images/hero.jpg").
+        session_id: Session ID from a previous deplixo_enhance call. Links the
+                    enhance context to the deploy for better code analysis. Always
+                    pass this if you received one from deplixo_enhance.
                 Deplixo downloads the image, hosts it permanently, and rewrites
                 the URL in the code. Use this when the user provides a web URL
                 for an image (not a local file).
@@ -928,6 +1017,8 @@ async def deplixo_deploy(
         payload["cron"] = cron
     if assets:
         payload["assets"] = assets
+    if session_id:
+        payload["session_id"] = session_id
 
     timeout = httpx.Timeout(connect=10.0, read=180.0, write=30.0, pool=10.0)
     try:
@@ -999,7 +1090,12 @@ async def deplixo_deploy(
                     "Upload them at https://deplixo.com/dashboard/images/ and share the CDN link "
                     "with me.' Never use fabricated paths like images/photo.png.",
                 ])
-            return "\n".join(parts)
+            deploy_result = "\n".join(parts)
+            if session_id:
+                await _log_mcp_call(session_id, "deploy",
+                                    {"app_id": app_id, "title": title, "updated": True},
+                                    deploy_result, app_id=hash_id)
+            return deploy_result
 
         # --- First deploy of this app ---
         if claim_url:
@@ -1041,7 +1137,12 @@ async def deplixo_deploy(
                 parts.extend(_format_production_features(prod_features))
             if asset_warnings:
                 parts.extend(["", "Asset warnings:"] + [f"  - {w}" for w in asset_warnings])
-            return "\n".join(parts)
+            deploy_result = "\n".join(parts)
+            if session_id:
+                await _log_mcp_call(session_id, "deploy",
+                                    {"title": title, "new": True},
+                                    deploy_result, app_id=hash_id)
+            return deploy_result
         else:
             # App was deployed by an authenticated user (already activated)
             parts = [
@@ -1067,7 +1168,12 @@ async def deplixo_deploy(
                     "Upload them at https://deplixo.com/dashboard/images/ and share the CDN link "
                     "with me.' Never use fabricated paths like images/photo.png.",
                 ])
-            return "\n".join(parts)
+            deploy_result = "\n".join(parts)
+            if session_id:
+                await _log_mcp_call(session_id, "deploy",
+                                    {"title": title, "new_authenticated": True},
+                                    deploy_result, app_id=hash_id)
+            return deploy_result
     elif response.status_code == 400:
         try:
             data = response.json()
@@ -1398,10 +1504,15 @@ async def deplixo_enhance(
             parts.append("")
 
         if data.get("data_model"):
+            # Default personal: true unless pattern is explicitly multi-user.
+            # personal: false triggers a name prompt which is wrong UX for most apps.
+            # Exception: multi-user apps and auth-enabled apps (auth has real identity).
+            has_auth = "deplixo.auth" in (data.get("recommended_primitives") or [])
+            force_personal = pattern != "multi-user" and not has_auth
             parts.append("**Suggested data model:**\n")
             for coll in data["data_model"]:
                 name = coll.get("name", "?")
-                personal = coll.get("personal", False)
+                personal = True if force_personal else coll.get("personal", True)
                 fields = ", ".join(coll.get("fields", []))
                 parts.append(
                     f"- `deplixo.db.collection(\"{name}\", {{ personal: {str(personal).lower()} }})` "
@@ -1421,7 +1532,24 @@ async def deplixo_enhance(
             "with the inline SDK mock, let the user review, and deploy with deplixo_deploy."
         )
 
-        return "\n".join(parts)
+        # Pass session_id through so Claude includes it on deploy
+        session_id = data.get("session_id", "")
+        if session_id:
+            parts.append(
+                f"\n(Internal — to update this app, pass session_id=\"{session_id}\" "
+                f"to deplixo_deploy. This links the enhance context to the deploy "
+                f"for better code analysis.)\n"
+            )
+
+        result_text = "\n".join(parts)
+
+        # Log full MCP-level request/response to Django
+        if session_id:
+            await _log_mcp_call(session_id, "enhance",
+                                {"description": description, "constraints": constraints},
+                                result_text)
+
+        return result_text
     except Exception as e:
         return f"Enhancement analysis unavailable: {str(e)[:200]}. Build the app using deplixo_deploy with your best judgment."
 

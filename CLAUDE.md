@@ -35,19 +35,29 @@ contain the full SDK reference. Instead, it tells AIs:
 
 The full SDK reference lives in `deplixo/templates/pages/sdk.txt` — that is the
 **single source of truth**. The MCP instructions point to it rather than
-duplicating it. This means:
+duplicating it.
 
-- **New SDK features**: Update `sdk.txt` in the main deplixo repo. The MCP server
-  picks it up automatically because AIs fetch /sdk before writing code.
-- **Only update server.py when** adding:
-  - A new "NEVER do X, use deplixo.Y" rule to IMPORTANT RULES
-  - A new entry in "How to replace common stubs"
-  - A new Critical Quick Reference item (only for top-5 bug-causing mistakes)
+**The five locations that must stay in sync:**
 
-**The three files that must stay in sync:**
-1. `deplixo/templates/pages/sdk.txt` — Authoritative SDK reference (fetched by AIs)
-2. **This repo: `server.py`** — Lean MCP instructions (rules + stubs + quick ref)
-3. `deplixo/js/sdk/core.js` + `legos/` — The actual SDK code
+1. `deplixo/js/sdk/core.js` + `js/sdk/legos/` — The actual SDK code
+2. `deplixo/templates/pages/sdk.txt` — Authoritative SDK reference (fetched by AIs)
+3. `deplixo/primitives/<name>/` — **Registry files (snippets, anti-patterns,
+   manifests). These take PRIORITY over `_SDK_SNIPPETS` in server.py.** The
+   enhance tool returns these directly to AI clients. If you update server.py
+   but not the primitive files, AIs see the OLD snippet.
+   - `snippet.js` — Code pattern AIs copy-paste (HIGHEST priority)
+   - `anti_patterns.md` — Mistakes shown as "CRITICAL mistakes to avoid"
+   - `manifest.yaml` — Method descriptions, deploy flags
+   - `reference.md` — Extended reference docs
+4. **This repo: `server.py`** — `_SDK_SNIPPETS` (fallback), IMPORTANT RULES,
+   "How to replace common stubs", Critical Quick Reference
+5. `deplixo/api/v1/enhance.py` — Enhance LLM prompt and exclusion rules
 
-See `deplixo/CLAUDE.md` "SDK Documentation — KEEP ALL THREE IN SYNC" for the
+**When to update what:**
+- New/changed SDK feature → update ALL FIVE
+- New anti-pattern → `primitives/<name>/anti_patterns.md` + server.py NEVER rule
+- New "use X instead of Y" rule → server.py "How to replace common stubs"
+- Changed enhance behavior (which primitives are recommended) → `enhance.py`
+
+See `deplixo/CLAUDE.md` "SDK Documentation — KEEP ALL FIVE IN SYNC" for the
 full checklist.
