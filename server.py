@@ -1298,6 +1298,15 @@ async def deplixo_edit(
     - For entirely new files, use new_files dict
     - To remove files, list them in delete_files
 
+    CRITICAL — Most Deplixo apps are single-file HTML with inline <style> and
+    <script>. When adding a feature, you must edit ALL THREE layers in the same
+    call:
+    1. HTML: add the new elements (divs, inputs, buttons) your JS will target
+    2. CSS: add style rules for any new classes you use
+    3. JS: add functions, variable declarations, and event wiring
+    A common mistake is adding JS functions without the HTML elements they
+    reference or the CSS that styles them. Include all pieces in one edit call.
+
     EXAMPLE — change a color and update heading:
       edits=[
         {"file": "index.html", "search": "color: blue;", "replace": "color: red;"},
