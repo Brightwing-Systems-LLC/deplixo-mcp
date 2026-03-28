@@ -1823,11 +1823,67 @@ async def deplixo_enhance(
             "this app correctly.**\n"
         )
 
-        parts.append(
-            "**Next step:** ALWAYS show the user an in-chat preview artifact first. "
-            "Present the enhancements above as options. Ask the questions. Then build "
-            "with the inline SDK mock, let the user review, and deploy with deplixo_deploy."
-        )
+        # Phased build guidance — when the app is too complex for a single deploy
+        build_phases = data.get("build_phases")
+        if build_phases and len(build_phases) > 1:
+            parts.append(
+                "---\n\n"
+                "## CRITICAL — Phased Build Required\n\n"
+                "**This app is too complex to build correctly in a single pass.** "
+                "Apps with this many features, collections, and UI screens have a "
+                "very high failure rate when attempted all at once — broken interactions, "
+                "missing edge cases, and features that don't work together. The user "
+                "will end up with a buggy app that feels unfinished, which is WORSE "
+                "than a polished app that does less.\n\n"
+                "**The user will get a dramatically better result if you build this "
+                "in phases.** Each phase produces a working, deployed app they can "
+                "actually use and give feedback on. Then you add features with "
+                "deplixo_edit — fast, surgical updates that don't risk breaking what "
+                "already works.\n\n"
+                "**Build plan:**\n"
+            )
+            for phase in build_phases:
+                phase_num = phase.get("phase", "?")
+                scope = phase.get("scope", "")
+                phase_prims = ", ".join(phase.get("primitives", []))
+                phase_colls = ", ".join(phase.get("collections", []))
+                if phase_num == 1:
+                    parts.append(
+                        f"- **Phase {phase_num} (BUILD NOW):** {scope}"
+                    )
+                else:
+                    parts.append(
+                        f"- **Phase {phase_num} (add later via deplixo_edit):** {scope}"
+                    )
+                if phase_prims:
+                    parts.append(f"  - Primitives: {phase_prims}")
+                if phase_colls:
+                    parts.append(f"  - Collections: {phase_colls}")
+            parts.append(
+                "\n**You MUST only build Phase 1 in the initial deploy.** Tell the "
+                "user the full plan — they'll be excited to see the roadmap — but "
+                "deploy Phase 1 first. After the user confirms it works, use "
+                "deplixo_edit to add each subsequent phase. This approach gives the "
+                "user a working app in minutes instead of a broken app that tries to "
+                "do everything.\n\n"
+                "When presenting Phase 1 to the user, frame it positively: "
+                "\"Let's start by getting the core experience live — [phase 1 scope] — "
+                "and then we'll layer on [phase 2+ features] once you've had a chance "
+                "to try it out.\"\n"
+            )
+
+            parts.append(
+                "**Next step:** ALWAYS show the user an in-chat preview artifact first. "
+                "Present the enhancements above as options. Ask the questions. Then build "
+                "ONLY Phase 1 with the inline SDK mock, let the user review, and deploy "
+                "with deplixo_deploy. Add later phases with deplixo_edit."
+            )
+        else:
+            parts.append(
+                "**Next step:** ALWAYS show the user an in-chat preview artifact first. "
+                "Present the enhancements above as options. Ask the questions. Then build "
+                "with the inline SDK mock, let the user review, and deploy with deplixo_deploy."
+            )
 
         # Pass session_id through — REQUIRED on all subsequent deploy calls
         session_id = data.get("session_id", "")
